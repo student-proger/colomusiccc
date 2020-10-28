@@ -21,6 +21,10 @@ from pywinusb import hid
 
 from threading import Thread, Lock
 
+import pygame
+import pygame.midi
+from pygame.locals import *
+
 #Qt
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import QTableWidgetItem, QLabel, QTimeEdit, QInputDialog, QComboBox
@@ -42,7 +46,7 @@ butt = {
 }
 
 buttPress = {
-    "agbvPlus": [140, 35, 20, 20, "+", False],
+    "agbvPlus": [150, 35, 20, 20, "+", False],
     "agbvMinus": [80, 35, 20, 20, "-", False]
 }
 
@@ -65,11 +69,83 @@ lock_spectrum = Lock()
 leftLevel = 0
 rightLevel = 0
 
-class MyThread(Thread):
+
+
+
+
+class MidiThread(Thread):
     def __init__(self):
-        """Инициализация потока"""
         Thread.__init__(self)
-        #self.name = name
+
+    def run(self):
+        print("Start MIDI thread")
+        self.input_main()
+        print("MIDI stop thread")
+
+    def _print_device_info(self):
+        for i in range( pygame.midi.get_count() ):
+            r = pygame.midi.get_device_info(i)
+            (interf, name, input, output, opened) = r
+
+            in_out = ""
+            if input:
+                in_out = "(input)"
+            if output:
+                in_out = "(output)"
+
+            print ("%2i: interface :%s:, name :%s:, opened :%s:  %s" %
+                   (i, interf, name, opened, in_out))
+
+    def input_main(self, device_id = None):
+        pygame.init()
+        pygame.fastevent.init()
+        event_get = pygame.fastevent.get
+        event_post = pygame.fastevent.post
+
+        pygame.midi.init()
+
+        self._print_device_info()
+
+
+        if device_id is None:
+            input_id = pygame.midi.get_default_input_id()
+        else:
+            input_id = device_id
+
+        print ("using input_id :%s:" % input_id)
+        i = pygame.midi.Input( input_id )
+
+        pygame.display.set_mode((1,1))
+
+
+
+        while True:
+            time.sleep(0.1)
+            events = event_get()
+            for e in events:
+                if e.type in [pygame.midi.MIDIIN]:
+                    print (e)
+
+            if i.poll():
+                midi_events = i.read(10)
+                # convert them into pygame events.
+                midi_evs = pygame.midi.midis2events(midi_events, i.device_id)
+
+                for m_e in midi_evs:
+                    event_post( m_e )
+            lock_stop_thread.acquire()
+            if stop_thread:
+                lock_stop_thread.release()
+                break
+            lock_stop_thread.release()
+
+        del i
+        pygame.midi.quit()
+        
+
+class SoundThread(Thread):
+    def __init__(self):
+        Thread.__init__(self)
     
     def run(self):
         global gain
@@ -118,6 +194,7 @@ class MyThread(Thread):
                     time.sleep(1)
                     lock_stop_thread.acquire()
                     if stop_thread:
+                        lock_stop_thread.release()
                         break
                     lock_stop_thread.release()
 
@@ -387,7 +464,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         #Надписи
         qp.setPen(activeColor)
         qp.setFont(QFont('Arial', 10))
-        qp.drawText(QRect(100, 35, 40, 20), Qt.AlignCenter, str(self.agBurstValue) + "%")
+        qp.drawText(QRect(100, 35, 50, 20), Qt.AlignCenter, str(self.agBurstValue) + "%")
 
     def processMode1(self):
         if len(self.spectrum) == 0:
@@ -438,15 +515,19 @@ def main():
     window = ColormusicApp()  # Создаём объект класса SchoolRingerApp
     window.show()  # Показываем окно
 
-    my_thread = MyThread()
-    my_thread.start()
+    sound_thread = SoundThread()
+    sound_thread.start()
+
+    midi_thread = MidiThread()
+    midi_thread.start()
 
     app.exec_()  # и запускаем приложение
 
     lock_stop_thread.acquire()
     stop_thread = True
     lock_stop_thread.release()
-    my_thread.join()
+    sound_thread.join()
+    midi_thread.join()
 
     window.closeHID()
 

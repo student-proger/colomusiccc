@@ -1,0 +1,4 @@
+PyQt5==5.13.2
+pywinusb==0.4.2
+numpy==1.19.1
+sounddevice==0.4.1

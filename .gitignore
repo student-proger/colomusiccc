@@ -1,0 +1,7 @@
+__pycache__/
+_develop/
+build/
+dist/
+scheme/
+installerbuild/
+main.spec

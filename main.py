@@ -39,6 +39,13 @@ RED = 0
 GREEN = 1
 BLUE = 2
 
+LPC_OFF = 12
+LPC_RED = (0, 0x0D, 0x0E, 0x0F)
+LPC_GREEN = (0, 0x1C, 0x2C, 0x3C)
+LPC_ORANGE = (0, 0x1D, 0x2E, 0x3F)
+LPC_YELLOW = 0x3E
+LPC_FLASH = -4
+
 butt = {
     "OnOff": [10, 10, 50, 20, "ON", False],
     "AutoGain": [80, 10, 90, 20, "Auto gain", False],
@@ -71,18 +78,87 @@ rightLevel = 0
 
 
 
-
-
-class MidiThread(Thread):
+class MidiDevice:
     def __init__(self):
-        Thread.__init__(self)
+        pygame.init()
+        pygame.fastevent.init()
+        pygame.midi.init()
+        self.DoubleBufferActivePage = 0
+        self.__print_device_info()
 
-    def run(self):
-        print("Start MIDI thread")
-        self.input_main()
-        print("MIDI stop thread")
+    def __del__(self):
+        try:
+            self.devOut.close()
+        except AttributeError:
+            pass
+        self.midi_thread.join()
+        pygame.midi.quit()
 
-    def _print_device_info(self):
+    def startInput(self, device_id = None):
+        self.midi_thread = self.MidiInputThread(device_id)
+        self.midi_thread.start()
+
+    def startOutput(self, device_id = None):
+        if device_id is None:
+            port = pygame.midi.get_default_output_id()
+        else:
+            port = device_id
+        print ("using output_id :%s:" % port)
+        self.devOut = pygame.midi.Output(port, 0)
+
+    def send(self, msg, key, velocity):
+        self.devOut.write_short(msg, key, velocity)
+
+    def resetLaunchpad(self):
+        self.send(0xB0, 0, 0)
+
+    """Включает выбранный светодиод.
+    Варианты вызова:
+    setLed(x, y, color), где x,y - координаты кнопки по сетке
+    setLed(n, color), где n - номер кнопки по-порядку
+    """
+    def setLed(self, x, y, c = None):
+        if c == None:
+            n = x
+            color = y
+        else:
+            n = 16 * y + x
+            color = c
+        self.send(0x90, n, color)
+
+    def setTopLed(self, n, color):
+        self.send(0xB0, 0x68 + n, color)
+
+    def doubleBufferEnable(self):
+        self.send(0xB0, 0x00, 0x31)
+        self.DoubleBufferActivePage = 0
+
+    def doubleBufferDisable(self):
+        self.send(0xB0, 0x00, 0x30)
+
+    def swapBuffer(self):
+        if self.DoubleBufferActivePage == 0:
+            self.send(0xB0, 0x00, 0x34)
+        else:
+            self.send(0xB0, 0x00, 0x31)
+
+    def flashEnable(self):
+        self.send(0xB0, 0x00, 0x28)
+
+    def flashActive(self, enable):
+        if enable:
+            self.send(0xB0, 0x00, 0x20)
+        else:
+            self.send(0xB0, 0x00, 0x21)
+
+    def rapidLedUpdate(self, velocity1, velocity2):
+        self.send(0x92, velocity1, velocity2)
+
+    def allLedsOn(self, brightness):
+        if (brightness >= 1) and (brightness <= 3):
+            self.send(0xB0, 0x00, 0x7C + brightness)
+
+    def __print_device_info(self):
         for i in range( pygame.midi.get_count() ):
             r = pygame.midi.get_device_info(i)
             (interf, name, input, output, opened) = r
@@ -96,46 +172,51 @@ class MidiThread(Thread):
             print ("%2i: interface :%s:, name :%s:, opened :%s:  %s" %
                    (i, interf, name, opened, in_out))
 
-    def input_main(self, device_id = None):
+    class MidiInputThread(Thread):
+        def __init__(self, device_id):
+            Thread.__init__(self)
+            self.device_id = device_id
+
+        def run(self):
+            print("Start MIDI thread")
+            self.input_main()
+            print("MIDI stop thread")
+
         
-        event_get = pygame.fastevent.get
-        event_post = pygame.fastevent.post
 
-        pygame.midi.init()
+        def input_main(self, device_id = None):
+            event_get = pygame.fastevent.get
+            event_post = pygame.fastevent.post
 
-        self._print_device_info()
+            if self.device_id is None:
+                input_id = pygame.midi.get_default_input_id()
+            else:
+                input_id = self.device_id
 
+            print ("using input_id :%s:" % input_id)
+            devIn = pygame.midi.Input( input_id )
 
-        if device_id is None:
-            input_id = pygame.midi.get_default_input_id()
-        else:
-            input_id = device_id
+            while True:
+                time.sleep(0.1)
+                events = event_get()
+                for e in events:
+                    if e.type in [pygame.midi.MIDIIN]:
+                        print (e)
 
-        print ("using input_id :%s:" % input_id)
-        i = pygame.midi.Input( input_id )
+                if devIn.poll():
+                    midi_events = devIn.read(10)
+                    # convert them into pygame events.
+                    midi_evs = pygame.midi.midis2events(midi_events, devIn.device_id)
 
-        while True:
-            time.sleep(0.1)
-            events = event_get()
-            for e in events:
-                if e.type in [pygame.midi.MIDIIN]:
-                    print (e)
-
-            if i.poll():
-                midi_events = i.read(10)
-                # convert them into pygame events.
-                midi_evs = pygame.midi.midis2events(midi_events, i.device_id)
-
-                for m_e in midi_evs:
-                    event_post( m_e )
-            lock_stop_thread.acquire()
-            if stop_thread:
+                    for m_e in midi_evs:
+                        event_post( m_e )
+                lock_stop_thread.acquire()
+                if stop_thread:
+                    lock_stop_thread.release()
+                    break
                 lock_stop_thread.release()
-                break
-            lock_stop_thread.release()
 
-        i.close()
-        pygame.midi.quit()
+            devIn.close()
         
 
 class SoundThread(Thread):
@@ -507,52 +588,31 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
 def main():
     global stop_thread
+    global midi
 
     app = QtWidgets.QApplication(sys.argv)  # Новый экземпляр QApplication
     window = ColormusicApp()  # Создаём объект класса SchoolRingerApp
     window.show()  # Показываем окно
 
-    #MIDI init
-    pygame.init()
-    pygame.fastevent.init()
-
-
-    pygame.midi.init()
-    '''if device_id is None:
-        port = pygame.midi.get_default_output_id()
-    else:
-        port = device_id'''
-    port = 3
-    print ("using output_id :%s:" % port)
-    midi_out = pygame.midi.Output(port, 0)
-    '''midi_out.set_instrument(2)
-    midi_out.note_on(144, 2)
-    time.sleep(2)
-    midi_out.note_off(56)'''
-    midi_out.close()
-    
-
     sound_thread = SoundThread()
     sound_thread.start()
 
-    midi_thread = MidiThread()
-    midi_thread.start()
+    midi = MidiDevice()
+    midi.startInput()
+    midi.startOutput(3)
 
+    midi.resetLaunchpad()
     
-
     app.exec_()  # и запускаем приложение
-
     
-
+    #Отправляем потокам сообщение о необходимости остановки
     lock_stop_thread.acquire()
     stop_thread = True
     lock_stop_thread.release()
     sound_thread.join()
-    midi_thread.join()
-
     
-    #del midi_out
-    pygame.midi.quit()
+    midi.resetLaunchpad()
+    del midi
 
     window.closeHID()
 

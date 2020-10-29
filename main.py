@@ -97,8 +97,7 @@ class MidiThread(Thread):
                    (i, interf, name, opened, in_out))
 
     def input_main(self, device_id = None):
-        pygame.init()
-        pygame.fastevent.init()
+        
         event_get = pygame.fastevent.get
         event_post = pygame.fastevent.post
 
@@ -114,10 +113,6 @@ class MidiThread(Thread):
 
         print ("using input_id :%s:" % input_id)
         i = pygame.midi.Input( input_id )
-
-        pygame.display.set_mode((1,1))
-
-
 
         while True:
             time.sleep(0.1)
@@ -139,7 +134,7 @@ class MidiThread(Thread):
                 break
             lock_stop_thread.release()
 
-        del i
+        i.close()
         pygame.midi.quit()
         
 
@@ -508,6 +503,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         #зелёные — средние (от 800 до 3500 Гц),
         #синие — выше 3500 Гц
 
+
+
 def main():
     global stop_thread
 
@@ -515,19 +512,47 @@ def main():
     window = ColormusicApp()  # Создаём объект класса SchoolRingerApp
     window.show()  # Показываем окно
 
+    #MIDI init
+    pygame.init()
+    pygame.fastevent.init()
+
+
+    pygame.midi.init()
+    '''if device_id is None:
+        port = pygame.midi.get_default_output_id()
+    else:
+        port = device_id'''
+    port = 3
+    print ("using output_id :%s:" % port)
+    midi_out = pygame.midi.Output(port, 0)
+    '''midi_out.set_instrument(2)
+    midi_out.note_on(144, 2)
+    time.sleep(2)
+    midi_out.note_off(56)'''
+    midi_out.close()
+    
+
     sound_thread = SoundThread()
     sound_thread.start()
 
     midi_thread = MidiThread()
     midi_thread.start()
 
+    
+
     app.exec_()  # и запускаем приложение
+
+    
 
     lock_stop_thread.acquire()
     stop_thread = True
     lock_stop_thread.release()
     sound_thread.join()
     midi_thread.join()
+
+    
+    #del midi_out
+    pygame.midi.quit()
 
     window.closeHID()
 

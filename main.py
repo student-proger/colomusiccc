@@ -10,14 +10,11 @@ __version__ = "0.0.1a"
 import os
 import sys
 import time
-
 import math
 
 import numpy as np
 import sounddevice as sd
-
 from pywinusb import hid
-# https://sourceforge.net/projects/libusb-win32/files/libusb-win32-releases/1.2.6.0/
 
 from threading import Thread, Lock
 
@@ -35,10 +32,12 @@ from PyQt5.QtCore import Qt, QRect
 #design
 import mainform
 
+#Индексы элементов списка leds. Соответственно цветам светодиодов.
 RED = 0
 GREEN = 1
 BLUE = 2
 
+#Цвета для вывода на Launchpad. Для мигающего необходимо прибавить LPC_FLASH к основному значению.
 LPC_OFF = 12
 LPC_RED = (0, 0x0D, 0x0E, 0x0F)
 LPC_GREEN = (0, 0x1C, 0x2C, 0x3C)
@@ -46,23 +45,22 @@ LPC_ORANGE = (0, 0x1D, 0x2E, 0x3F)
 LPC_YELLOW = 0x3E
 LPC_FLASH = -4
 
+#Кнопки с фиксацией
 butt = {
     "OnOff": [10, 10, 50, 20, "ON", False],
     "AutoGain": [80, 10, 90, 20, "Auto gain", False],
     "LogComp": [180, 10, 90, 20, "Comp", False]
 }
 
+#Кнопки без фиксации
 buttPress = {
     "agbvPlus": [150, 35, 20, 20, "+", False],
     "agbvMinus": [80, 35, 20, 20, "-", False]
 }
 
-columns = 60
+COLUMNS = 60
 
-
-print(sd.query_devices())
-
-device = None
+soundDevice = None
 block_duration = 20
 low = 40
 high = 2000
@@ -75,7 +73,6 @@ spectrum = []
 lock_spectrum = Lock()
 leftLevel = 0
 rightLevel = 0
-
 
 
 class MidiDevice:
@@ -158,6 +155,47 @@ class MidiDevice:
         if (brightness >= 1) and (brightness <= 3):
             self.send(0xB0, 0x00, 0x7C + brightness)
 
+    def demo(self):
+        for x in range(0, 4):
+            for y in range(0, 4):
+                self.setLed(x, y, LPC_GREEN[3])
+        time.sleep(0.1)
+        for x in range(0, 4):
+            for y in range(0, 4):
+                self.setLed(x, y, LPC_OFF)
+
+        for x in range(4, 8):
+            for y in range(4, 8):
+                self.setLed(x, y, LPC_GREEN[3])
+        time.sleep(0.1)
+        for x in range(4, 8):
+            for y in range(4, 8):
+                self.setLed(x, y, LPC_OFF)
+
+        for x in range(0, 4):
+            for y in range(4, 8):
+                self.setLed(x, y, LPC_RED[3])
+        time.sleep(0.1)
+        for x in range(0, 4):
+            for y in range(4, 8):
+                self.setLed(x, y, LPC_OFF)
+
+        for x in range(4, 8):
+            for y in range(0, 4):
+                self.setLed(x, y, LPC_RED[3])
+        time.sleep(0.1)
+        for x in range(4, 8):
+            for y in range(0, 4):
+                self.setLed(x, y, LPC_OFF)
+
+        for x in range(2, 6):
+            for y in range(2, 6):
+                self.setLed(x, y, LPC_ORANGE[3])
+        time.sleep(0.1)
+        for x in range(2, 6):
+            for y in range(2, 6):
+                self.setLed(x, y, LPC_OFF)
+
     def __print_device_info(self):
         for i in range( pygame.midi.get_count() ):
             r = pygame.midi.get_device_info(i)
@@ -219,40 +257,44 @@ class MidiDevice:
             devIn.close()
         
 
+"""Класс захвата аудиопотока. Выполняется в отдельном потоке.
+Здесь же происходит быстрое преобразование Фурье.
+"""
 class SoundThread(Thread):
     def __init__(self):
         Thread.__init__(self)
     
     def run(self):
         global gain
-        """Запуск потока"""
         try:
-            samplerate = sd.query_devices(device, 'input')['default_samplerate']
+            samplerate = sd.query_devices(soundDevice, 'input')['default_samplerate']
 
-            delta_f = (high - low) / (columns - 1)
+            delta_f = (high - low) / (COLUMNS - 1)
             fftsize = math.ceil(samplerate / delta_f)
             low_bin = math.floor(low / delta_f)
 
+            #callback-функция, которая вызывается при получении звукового сэмпла
             def callback(indata, frames, time, status):
                 global spectrum
                 global leftLevel
                 global rightLevel
-                #print(indata[:, 1])
+
                 if status:
                     text = '************************ ' + str(status) + ' ************************'
                     print(text)
-                #if any(indata[0]):
+                
+                #Быстрые преобразования Фурье
+                #Левый канал
                 magnitude = np.abs(np.fft.rfft(indata[:, 0], n=fftsize))
                 magnitude *= gain / fftsize
-
                 leftspectrum = []
-                for x in magnitude[low_bin:low_bin + columns]:
+                for x in magnitude[low_bin:low_bin + COLUMNS]:
                     leftspectrum.append(round(x * 100000))
+                #Правый канал
                 magnitude = np.abs(np.fft.rfft(indata[:, 1], n=fftsize))
                 magnitude *= gain / fftsize
-
                 rightspectrum = []
-                for x in magnitude[low_bin:low_bin + columns]:
+                for x in magnitude[low_bin:low_bin + COLUMNS]:
                     rightspectrum.append(round(x * 100000))
 
                 lock_spectrum.acquire()
@@ -263,7 +305,8 @@ class SoundThread(Thread):
                     spectrum.append(max(leftspectrum[i], rightspectrum[i]))
                 lock_spectrum.release()
 
-            with sd.InputStream(device=device, channels=2, callback=callback,
+            #Захват звука с аудиоустройства
+            with sd.InputStream(device=soundDevice, channels=2, callback=callback,
                                 blocksize=int(samplerate * block_duration / 1000),
                                 samplerate=samplerate):
                 while True:
@@ -280,18 +323,19 @@ class SoundThread(Thread):
             print(type(e).__name__ + ': ' + str(e))
 
 
+#Класс главного окна приложения
 class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)  # Это нужно для инициализации нашего дизайна
 
-        self.Mode = 1
+        self.Mode = 5
 
         self.leds = []
         for i in range(0, 10):
             self.leds.append([0, 0, 0])
 
-        self.spectrum = [0] * columns
+        self.spectrum = [0] * COLUMNS
 
         self.maxvalue = 1
         self.lastMaxPeakTime = time.time()
@@ -303,12 +347,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.timer.timeout.connect(self.on_timer)
         self.timer.start(20)
 
-        self.pushButton.pressed.connect(self.testbutton)
-
         self.openHID(vid = 0x1EAF, pid = 0x0028)
-        
-    def testbutton(self):
-        pass
 
     #Отправка данных на USB HID устройство
     def writeHID(self):
@@ -324,7 +363,10 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         except AttributeError:
             return
 
-    #Открытие USB HID устройства для работы
+    """Открытие USB HID устройства для работы
+    vid - Vendor ID
+    pid - Product ID
+    """
     def openHID(self, vid, pid):
         filter = hid.HidDeviceFilter(vendor_id = vid, product_id = pid)
         devices = filter.get_devices()
@@ -390,8 +432,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.spectrum.append(x)
         lock_spectrum.release()
 
-        if len(self.spectrum) != columns:
-            self.spectrum = [0] * columns
+        if len(self.spectrum) != COLUMNS:
+            self.spectrum = [0] * COLUMNS
 
         self.update()
 
@@ -405,14 +447,14 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                 self.maxvalue = maxs
                 self.lastMaxPeakTime = time.time()
             gainCorrection = ((self.agBurstValue / 100) * 1000 + 1000) / self.maxvalue
-            for i in range(0, columns):
+            for i in range(0, COLUMNS):
                 self.spectrum[i] = self.spectrum[i] * gainCorrection
         #==========================
 
 
         #Логарифмический компрессор
         if butt["LogComp"][5]:
-            for i in range(0, columns):
+            for i in range(0, COLUMNS):
                 try:
                     self.spectrum[i] = ((self.agBurstValue / 100) * 1000 + 1000) * (1 / math.log10(1000 / 50)) * math.log10(self.spectrum[i] / 50)
                     if self.spectrum[i] < 0:
@@ -423,6 +465,14 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
         if self.Mode == 1:
             self.processMode1()
+        elif self.Mode == 2:
+            self.processMode2()
+        elif self.Mode == 3:
+            self.processMode3()
+        elif self.Mode == 4:
+            self.processMode4()
+        elif self.Mode == 5:
+            self.processMode5()
 
         self.writeHID()
 
@@ -542,6 +592,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         qp.setFont(QFont('Arial', 10))
         qp.drawText(QRect(100, 35, 50, 20), Qt.AlignCenter, str(self.agBurstValue) + "%")
 
+    #Обработка спектра для вывода на цветомузыку.
     def processMode1(self):
         if len(self.spectrum) == 0:
             return
@@ -578,21 +629,154 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         
 
     def processMode2(self):
-        pass
         #красные лампы — низкие частоты (диапазон до 200 Гц),
         #жёлтые — средне-низкие (диапазон от 200 до 800 Гц),
         #зелёные — средние (от 800 до 3500 Гц),
         #синие — выше 3500 Гц
+        if len(self.spectrum) == 0:
+            return
+        ch = [0, 0, 0, 0]
+        ch[0] = max(self.spectrum[0:5])
+        ch[1] = max(self.spectrum[5:23])
+        ch[2] = max(self.spectrum[23:60])
 
+        for i in range(0, 10):
+            self.leds[i][RED] -= 50
+            self.leds[i][GREEN] -= 50
+            self.leds[i][BLUE] -= 50
+            if self.leds[i][RED] < 0:
+                self.leds[i][RED] = 0
+            if self.leds[i][GREEN] < 0:
+                self.leds[i][GREEN] = 0
+            if self.leds[i][BLUE] < 0:
+                self.leds[i][BLUE] = 0
 
+        if ch[0] > 750:
+            self.leds[0][RED] = 255
+            self.leds[1][RED] = 255
+            self.leds[2][RED] = 255
+            self.leds[3][RED] = 255
+        if ch[1] > 750:
+            self.leds[3][GREEN] = 255
+            self.leds[4][GREEN] = 255
+            self.leds[5][GREEN] = 255
+            self.leds[6][GREEN] = 255
+        if ch[2] > 750:
+            self.leds[6][BLUE] = 255
+            self.leds[7][BLUE] = 255
+            self.leds[8][BLUE] = 255
+            self.leds[9][BLUE] = 255
+
+    def processMode3(self):
+        if len(self.spectrum) == 0:
+            return
+        ch = [0, 0, 0, 0]
+        ch[0] = max(self.spectrum[0:5])
+        ch[1] = max(self.spectrum[5:23])
+        ch[2] = max(self.spectrum[23:60])
+
+        for i in range(0, 10):
+            self.leds[i][RED] -= 50
+            self.leds[i][GREEN] -= 50
+            self.leds[i][BLUE] -= 50
+            if self.leds[i][RED] < 0:
+                self.leds[i][RED] = 0
+            if self.leds[i][GREEN] < 0:
+                self.leds[i][GREEN] = 0
+            if self.leds[i][BLUE] < 0:
+                self.leds[i][BLUE] = 0
+
+        if ch[0] > 750:
+            self.leds[0][RED] = 255
+            self.leds[3][RED] = 255
+            self.leds[6][RED] = 255
+            self.leds[9][RED] = 255
+        if ch[1] > 750:
+            self.leds[1][GREEN] = 255
+            self.leds[4][GREEN] = 255
+            self.leds[5][GREEN] = 255
+            self.leds[8][GREEN] = 255
+        if ch[2] > 750:
+            self.leds[2][BLUE] = 255
+            self.leds[4][BLUE] = 255
+            self.leds[5][BLUE] = 255
+            self.leds[7][BLUE] = 255
+
+    def processMode4(self):
+        if len(self.spectrum) == 0:
+            return
+        ch = [0, 0, 0, 0]
+        ch[0] = max(self.spectrum[0:5])
+        ch[1] = max(self.spectrum[5:23])
+        ch[2] = max(self.spectrum[23:60])
+
+        for i in range(0, 10):
+            self.leds[i][RED] -= 50
+            self.leds[i][GREEN] -= 50
+            self.leds[i][BLUE] -= 50
+            if self.leds[i][RED] < 0:
+                self.leds[i][RED] = 0
+            if self.leds[i][GREEN] < 0:
+                self.leds[i][GREEN] = 0
+            if self.leds[i][BLUE] < 0:
+                self.leds[i][BLUE] = 0
+
+        if ch[0] > 750:
+            for i in range(0, 10):
+                self.leds[i][RED] = 255
+        if ch[1] > 750:
+            for i in range(0, 10):
+                self.leds[i][GREEN] = 255
+        if ch[2] > 750:
+            for i in range(0, 10):
+                self.leds[i][BLUE] = 255
+
+    def processMode5(self):
+        if len(self.spectrum) == 0:
+            return
+        ch = [0, 0, 0]
+        ch[0] = max(self.spectrum[0:5])
+        ch[1] = max(self.spectrum[5:23])
+        ch[2] = max(self.spectrum[23:60])
+
+        for i in range(0, 4):
+            self.leds[i][RED] = self.leds[i + 1][RED]
+            self.leds[i][GREEN] = self.leds[i + 1][GREEN]
+            self.leds[i][BLUE] = self.leds[i + 1][BLUE]
+
+        for i in range(4, 6):
+            self.leds[i][RED] -= 50
+            self.leds[i][GREEN] -= 50
+            self.leds[i][BLUE] -= 50
+            if self.leds[i][RED] < 0:
+                self.leds[i][RED] = 0
+            if self.leds[i][GREEN] < 0:
+                self.leds[i][GREEN] = 0
+            if self.leds[i][BLUE] < 0:
+                self.leds[i][BLUE] = 0
+
+        if ch[0] > 750:
+            self.leds[4][RED] = 255
+        if ch[1] > 750:
+            self.leds[4][GREEN] = 255
+        if ch[2] > 750:
+            self.leds[4][BLUE] = 255
+
+        for i in range(0, 5):
+            self.leds[9 - i][RED] = self.leds[i][RED]
+            self.leds[9 - i][GREEN] = self.leds[i][GREEN]
+            self.leds[9 - i][BLUE] = self.leds[i][BLUE]
+            
 
 def main():
     global stop_thread
     global midi
 
-    app = QtWidgets.QApplication(sys.argv)  # Новый экземпляр QApplication
-    window = ColormusicApp()  # Создаём объект класса SchoolRingerApp
-    window.show()  # Показываем окно
+    app = QtWidgets.QApplication(sys.argv)
+    window = ColormusicApp()
+    window.show()
+
+    print(sd.query_devices())
 
     sound_thread = SoundThread()
     sound_thread.start()
@@ -602,6 +786,8 @@ def main():
     midi.startOutput(3)
 
     midi.resetLaunchpad()
+    midi.demo()
+    
     
     app.exec_()  # и запускаем приложение
     

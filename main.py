@@ -330,6 +330,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.setupUi(self)  # Это нужно для инициализации нашего дизайна
 
         self.Mode = 5
+        self.LaunchPadPage = 1
 
         self.leds = []
         for i in range(0, 10):
@@ -498,7 +499,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         #Фон
         qp.setPen(bgColor)
         qp.setBrush(bgColor)
-        qp.drawRect(0, 0, 700, 200)
+        qp.drawRect(0, 0, 700, 500)
 
         #Рамки
         qp.setPen(activeColor)
@@ -586,6 +587,18 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                 qp.setPen(activeColor)
             qp.setFont(QFont('Arial', 10))
             qp.drawText(QRect(x, y, w, h), Qt.AlignCenter, buttPress[item][4])
+
+        #Текущее состояние светодиодов
+        qp.setPen(activeColor)
+        for i in range(0, 10):
+            qp.setBrush(QColor(self.leds[i][RED], self.leds[i][GREEN], self.leds[i][BLUE]))
+            qp.drawRect(30 + i * 22, 200, 20, 20)
+
+        qp.setPen(activeColor)
+        qp.setBrush(bgColor)
+        for x in range(0, 8):
+            for y in range(0, 8):
+                qp.drawRect(30 + x * 22, 230 + y * 22, 20, 20)
 
         #Надписи
         qp.setPen(activeColor)

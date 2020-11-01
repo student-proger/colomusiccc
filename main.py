@@ -4,6 +4,12 @@
 * Design Name:    ColormusicCC
 * Description:    Программа для управления цветомузыкой
 '''
+"""
+TODO
+Стробоскоп
+Секвенсор на ланчпаде.
+
+"""
 
 __version__ = "0.0.1a"
 
@@ -45,17 +51,12 @@ LPC_ORANGE = (0, 0x1D, 0x2E, 0x3F)
 LPC_YELLOW = 0x3E
 LPC_FLASH = -4
 
-#Кнопки с фиксацией
-butt = {
-    "OnOff": [10, 10, 50, 20, "ON", False],
-    "AutoGain": [80, 10, 90, 20, "Auto gain", False],
-    "LogComp": [180, 10, 90, 20, "Comp", False]
-}
+
 
 #Кнопки без фиксации
 buttPress = {
-    "agbvPlus": [150, 35, 20, 20, "+", False],
-    "agbvMinus": [80, 35, 20, 20, "-", False]
+    "agbvPlus": [150, 35, 20, 20, "+", False, None],
+    "agbvMinus": [80, 35, 20, 20, "-", False, None]
 }
 
 COLUMNS = 60
@@ -91,8 +92,8 @@ class MidiDevice:
         self.midi_thread.join()
         pygame.midi.quit()
 
-    def startInput(self, device_id = None):
-        self.midi_thread = self.MidiInputThread(device_id)
+    def startInput(self, device_id = None, callback = None):
+        self.midi_thread = self.MidiInputThread(device_id, callback)
         self.midi_thread.start()
 
     def startOutput(self, device_id = None):
@@ -211,31 +212,32 @@ class MidiDevice:
                    (i, interf, name, opened, in_out))
 
     class MidiInputThread(Thread):
-        def __init__(self, device_id):
+        def __init__(self, device_id, callback):
             Thread.__init__(self)
             self.device_id = device_id
+            self.callback = callback
 
         def run(self):
             print("Start MIDI thread")
-            self.input_main()
+            self.input_main(self.device_id, self.callback)
             print("MIDI stop thread")
 
         
 
-        def input_main(self, device_id = None):
+        def input_main(self, device_id = None, callback = None):
             event_get = pygame.fastevent.get
             event_post = pygame.fastevent.post
 
-            if self.device_id is None:
+            if device_id is None:
                 input_id = pygame.midi.get_default_input_id()
             else:
-                input_id = self.device_id
+                input_id = device_id
 
             print ("using input_id :%s:" % input_id)
             devIn = pygame.midi.Input( input_id )
 
             while True:
-                time.sleep(0.1)
+                time.sleep(0.05)
                 events = event_get()
                 for e in events:
                     if e.type in [pygame.midi.MIDIIN]:
@@ -243,11 +245,15 @@ class MidiDevice:
 
                 if devIn.poll():
                     midi_events = devIn.read(10)
-                    # convert them into pygame events.
-                    midi_evs = pygame.midi.midis2events(midi_events, devIn.device_id)
+                    for item in midi_events:
+                        midi_msg = item[0]
+                        callback(midi_msg)
 
-                    for m_e in midi_evs:
-                        event_post( m_e )
+                    # convert them into pygame events.
+                    #midi_evs = pygame.midi.midis2events(midi_events, devIn.device_id)
+                    #for m_e in midi_evs:
+                    #    event_post( m_e )
+
                 lock_stop_thread.acquire()
                 if stop_thread:
                     lock_stop_thread.release()
@@ -329,8 +335,24 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         super().__init__()
         self.setupUi(self)  # Это нужно для инициализации нашего дизайна
 
-        self.Mode = 5
+        #Кнопки с фиксацией
+        #   X, Y, W, H, текст кнопки, состояние, callback
+        self.butt = {
+            "OnOff": [10, 10, 50, 20, "ON", False, None],
+            "AutoGain": [80, 10, 90, 20, "Auto gain", False, None],
+            "LogComp": [180, 10, 90, 20, "Comp", False, None],
+            "Strob1": [280, 10, 45, 45, "Strob", False, self.eventStrobButton],
+            "Strob2": [330, 10, 45, 45, "Strob", False, self.eventStrobButton],
+            "Strob3": [380, 10, 45, 45, "Strob", False, self.eventStrobButton],
+            "Strob4": [430, 10, 45, 45, "Strob", False, self.eventStrobButton],
+            "Strob5": [480, 10, 45, 45, "Strob", False, self.eventStrobButton]
+        }
+
+        self.Mode = 1
         self.LaunchPadPage = 1
+        self.StroboActive = False
+        self.StroboTimer = QtCore.QTimer()
+        self.StroboTimer.timeout.connect(self.strob)
 
         self.leds = []
         for i in range(0, 10):
@@ -349,6 +371,54 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.timer.start(20)
 
         self.openHID(vid = 0x1EAF, pid = 0x0028)
+
+        self.midi = MidiDevice()
+        self.midi.startInput(callback = self.midicallback)
+        self.midi.startOutput(3)
+
+        self.midi.resetLaunchpad()
+        self.midi.demo()
+        self.midi.setLed(8, 0, LPC_YELLOW)
+        self.midi.setLed(8, 1, LPC_RED[1])
+        self.midi.setLed(8, 2, LPC_RED[1])
+
+    def closeRes(self):
+        self.midi.resetLaunchpad()
+        del self.midi
+
+    def midicallback(self, msg):
+        print(msg)
+
+    def strob(self):
+        for i in range(0, 10):
+            self.leds[i][RED] = 255
+            self.leds[i][GREEN] = 255
+            self.leds[i][BLUE] = 255
+
+    def eventStrobButton(self, name, state):
+        for i in range(1, 6):
+            s = "Strob" + str(i)
+            self.butt[s][5] = False
+        if state:
+            self.butt[name][5] = True
+
+        if state:
+            if name == "Strob1":
+                bpm = 60
+            elif name == "Strob2":
+                bpm = 120
+            elif name == "Strob3":
+                bpm = 300
+            elif name == "Strob4":
+                bpm = 600
+            elif name == "Strob5":
+                bpm = 1200
+
+            period = round(60000 / bpm)
+            self.StroboActive = True
+            self.StroboTimer.start(period)
+        else:
+            self.StroboTimer.stop()
 
     #Отправка данных на USB HID устройство
     def writeHID(self):
@@ -392,11 +462,15 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
     def mousePressEvent(self, QMouseEvent):
         xx = QMouseEvent.x()
         yy = QMouseEvent.y()
-        for item in butt:
-            x, y = butt[item][0], butt[item][1]
-            w, h = butt[item][2], butt[item][3]
+        for item in self.butt:
+            x, y = self.butt[item][0], self.butt[item][1]
+            w, h = self.butt[item][2], self.butt[item][3]
             if (xx >= x) and (xx < x + w) and (yy >= y) and (yy < y + h):
-                butt[item][5] = not butt[item][5]
+                self.butt[item][5] = not self.butt[item][5]
+                proc = self.butt[item][6]
+                if proc:
+                    proc(item, self.butt[item][5])
+
 
         for item in buttPress:
             x, y = buttPress[item][0], buttPress[item][1]
@@ -439,7 +513,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.update()
 
         #Auto gain
-        if butt["AutoGain"][5]:
+        if self.butt["AutoGain"][5]:
             if time.time() - self.lastMaxPeakTime > 15:
                 self.maxvalue = 1
 
@@ -454,7 +528,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
 
         #Логарифмический компрессор
-        if butt["LogComp"][5]:
+        if self.butt["LogComp"][5]:
             for i in range(0, COLUMNS):
                 try:
                     self.spectrum[i] = ((self.agBurstValue / 100) * 1000 + 1000) * (1 / math.log10(1000 / 50)) * math.log10(self.spectrum[i] / 50)
@@ -474,7 +548,12 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.processMode4()
         elif self.Mode == 5:
             self.processMode5()
+        elif self.Mode == 6:
+            self.processMode6()
+        elif self.Mode == 7:
+            self.processMode7()
 
+     
         self.writeHID()
 
     #Обработчик перерисовки формы
@@ -554,22 +633,22 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                 qp.drawRect(23, 62 + 10*(9 - y), 9, 9)
 
         #Рисуем кнопки
-        for item in butt:
-            x, y = butt[item][0], butt[item][1]
-            w, h = butt[item][2], butt[item][3]
-            if butt[item][5]:
+        for item in self.butt:
+            x, y = self.butt[item][0], self.butt[item][1]
+            w, h = self.butt[item][2], self.butt[item][3]
+            if self.butt[item][5]:
                 qp.setBrush(activeColor)
             else:
                 qp.setBrush(bgColor)
             qp.setPen(activeColor)
             qp.drawRect(x, y, w, h)
 
-            if butt[item][5]:
+            if self.butt[item][5]:
                 qp.setPen(bgColor)
             else:
                 qp.setPen(activeColor)
             qp.setFont(QFont('Arial', 10))
-            qp.drawText(QRect(x, y, w, h), Qt.AlignCenter, butt[item][4])
+            qp.drawText(QRect(x, y, w, h), Qt.AlignCenter, self.butt[item][4])
 
         for item in buttPress:
             x, y = buttPress[item][0], buttPress[item][1]
@@ -593,12 +672,6 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         for i in range(0, 10):
             qp.setBrush(QColor(self.leds[i][RED], self.leds[i][GREEN], self.leds[i][BLUE]))
             qp.drawRect(30 + i * 22, 200, 20, 20)
-
-        qp.setPen(activeColor)
-        qp.setBrush(bgColor)
-        for x in range(0, 8):
-            for y in range(0, 8):
-                qp.drawRect(30 + x * 22, 230 + y * 22, 20, 20)
 
         #Надписи
         qp.setPen(activeColor)
@@ -642,10 +715,6 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         
 
     def processMode2(self):
-        #красные лампы — низкие частоты (диапазон до 200 Гц),
-        #жёлтые — средне-низкие (диапазон от 200 до 800 Гц),
-        #зелёные — средние (от 800 до 3500 Гц),
-        #синие — выше 3500 Гц
         if len(self.spectrum) == 0:
             return
         ch = [0, 0, 0, 0]
@@ -779,7 +848,67 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.leds[9 - i][RED] = self.leds[i][RED]
             self.leds[9 - i][GREEN] = self.leds[i][GREEN]
             self.leds[9 - i][BLUE] = self.leds[i][BLUE]
-            
+
+    def processMode6(self):
+        if len(self.spectrum) == 0:
+            return
+        ch = [0] * 10
+        for i in range(0, 10):
+            ch[i] = max(self.spectrum[i * 3:i * 3 + 3])
+
+
+        for i in range(0, 10):
+            self.leds[i][RED] = 0
+            self.leds[i][GREEN] = 0
+            self.leds[i][BLUE] = 0
+            v = round(ch[i] / 3)
+            if v > 255:
+                v = 255
+            if ch[i] > 800:
+                self.leds[i][RED] = v
+            elif ch[i] > 600:
+                self.leds[i][BLUE] = v
+            else:
+                self.leds[i][GREEN] = v
+
+
+        
+
+        #for i in range(0, 5):
+            #self.leds[9 - i][RED] = self.leds[i][RED]
+            #self.leds[9 - i][GREEN] = self.leds[i][GREEN]
+            #self.leds[9 - i][BLUE] = self.leds[i][BLUE]
+
+    def processMode7(self):
+        if len(self.spectrum) == 0:
+            return
+        ch = [0, 0, 0, 0]
+        ch[0] = max(self.spectrum[0:5])
+        ch[1] = max(self.spectrum[5:23])
+        ch[2] = max(self.spectrum[23:60])
+
+        for i in range(0, 3):
+            ch[i] = ch[i]**4 / 1000000000
+
+        for i in range(0, 3):
+            ch[i] = round(ch[i] / 3)
+            if ch[i] > 255:
+                ch[i] = 255
+
+        self.leds[0][RED] = ch[0]
+        self.leds[1][RED] = ch[0]
+        self.leds[2][RED] = ch[0]
+        self.leds[3][RED] = ch[0]
+
+        self.leds[3][GREEN] = ch[1]
+        self.leds[4][GREEN] = ch[1]
+        self.leds[5][GREEN] = ch[1]
+        self.leds[6][GREEN] = ch[1]
+
+        self.leds[6][BLUE] = ch[2]
+        self.leds[7][BLUE] = ch[2]
+        self.leds[8][BLUE] = ch[2]
+        self.leds[9][BLUE] = ch[2]
 
 def main():
     global stop_thread
@@ -794,13 +923,6 @@ def main():
     sound_thread = SoundThread()
     sound_thread.start()
 
-    midi = MidiDevice()
-    midi.startInput()
-    midi.startOutput(3)
-
-    midi.resetLaunchpad()
-    midi.demo()
-    
     
     app.exec_()  # и запускаем приложение
     
@@ -810,8 +932,8 @@ def main():
     lock_stop_thread.release()
     sound_thread.join()
     
-    midi.resetLaunchpad()
-    del midi
+    window.closeRes()
+    
 
     window.closeHID()
 

@@ -390,10 +390,16 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         print(msg)
 
     def strob(self):
-        for i in range(0, 10):
-            self.leds[i][RED] = 255
-            self.leds[i][GREEN] = 255
-            self.leds[i][BLUE] = 255
+        buf = [0x00]
+
+        for i in range(0, 30):
+            buf.append(0xFF)
+
+        try:
+            self.out_report.set_raw_data(buf)
+            self.out_report.send()
+        except AttributeError:
+            return
 
     def eventStrobButton(self, name, state):
         for i in range(1, 6):

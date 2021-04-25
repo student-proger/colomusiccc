@@ -52,14 +52,11 @@ LPC_YELLOW = 0x3E
 LPC_FLASH = -4
 
 
-
 #Кнопки без фиксации
 buttPress = {
     "agbvPlus": [150, 35, 20, 20, "+", False, None],
     "agbvMinus": [80, 35, 20, 20, "-", False, None]
 }
-
-COLUMNS = 60
 
 soundDevice = None
 block_duration = 20
@@ -76,6 +73,7 @@ leftLevel = 0
 rightLevel = 0
 
 
+#Класс для работы с MIDI устройством (Launchpad)
 class MidiDevice:
     def __init__(self):
         pygame.init()
@@ -92,11 +90,19 @@ class MidiDevice:
         self.midi_thread.join()
         pygame.midi.quit()
 
+    #Включение MIDI-устройства ввода
+    # device_id - ID MIDI-устройства
+    # callback(msg) - callback функция, вызываемая при получении данных от устройства
     def startInput(self, device_id = None, callback = None):
         self.midi_thread = self.MidiInputThread(device_id, callback)
         self.midi_thread.start()
 
+
     def startOutput(self, device_id = None):
+        """Включение MIDI-устройства вывода
+
+        :param device_id: ID MIDI-устройства
+        """
         if device_id is None:
             port = pygame.midi.get_default_output_id()
         else:
@@ -104,18 +110,23 @@ class MidiDevice:
         print ("using output_id :%s:" % port)
         self.devOut = pygame.midi.Output(port, 0)
 
+
     def send(self, msg, key, velocity):
+        """Отправка данных на устройство"""
         self.devOut.write_short(msg, key, velocity)
 
+
     def resetLaunchpad(self):
+        """Сброс ланчпада"""
         self.send(0xB0, 0, 0)
 
-    """Включает выбранный светодиод.
-    Варианты вызова:
-    setLed(x, y, color), где x,y - координаты кнопки по сетке
-    setLed(n, color), где n - номер кнопки по-порядку
-    """
+    
     def setLed(self, x, y, c = None):
+        """Включает выбранный светодиод.
+        Варианты вызова:
+        setLed(x, y, color), где x,y - координаты кнопки по сетке
+        setLed(n, color), где n - номер кнопки по-порядку
+        """
         if c == None:
             n = x
             color = y
@@ -124,24 +135,39 @@ class MidiDevice:
             color = c
         self.send(0x90, n, color)
 
+
     def setTopLed(self, n, color):
+        """Включение светодиода на ланчпаде в верхем ряду кнопок
+
+        :param n: номер кнопки
+        :param color: цвет
+        """
         self.send(0xB0, 0x68 + n, color)
 
+
     def doubleBufferEnable(self):
+        """Включение двойной буферизации"""
         self.send(0xB0, 0x00, 0x31)
         self.DoubleBufferActivePage = 0
 
+
     def doubleBufferDisable(self):
+        """Выключение двойной буферизации"""
         self.send(0xB0, 0x00, 0x30)
 
+
     def swapBuffer(self):
+        """Обмен страниц буфера"""
         if self.DoubleBufferActivePage == 0:
             self.send(0xB0, 0x00, 0x34)
         else:
             self.send(0xB0, 0x00, 0x31)
 
+
     def flashEnable(self):
+        """Включение режима мигания"""
         self.send(0xB0, 0x00, 0x28)
+
 
     def flashActive(self, enable):
         if enable:
@@ -149,12 +175,20 @@ class MidiDevice:
         else:
             self.send(0xB0, 0x00, 0x21)
 
+
     def rapidLedUpdate(self, velocity1, velocity2):
+        """Быстрое обновление данных. В качестве параметров передаются сразу два цвета для двух кнопок"""
         self.send(0x92, velocity1, velocity2)
 
+
     def allLedsOn(self, brightness):
+        """Включение всех светодиодов.
+
+        :param brightness: яркость (1-3)
+        """
         if (brightness >= 1) and (brightness <= 3):
             self.send(0xB0, 0x00, 0x7C + brightness)
+
 
     def demo(self):
         for x in range(0, 4):
@@ -275,7 +309,7 @@ class SoundThread(Thread):
         try:
             samplerate = sd.query_devices(soundDevice, 'input')['default_samplerate']
 
-            delta_f = (high - low) / (COLUMNS - 1)
+            delta_f = (high - low) / (60 - 1)
             fftsize = math.ceil(samplerate / delta_f)
             low_bin = math.floor(low / delta_f)
 
@@ -294,13 +328,13 @@ class SoundThread(Thread):
                 magnitude = np.abs(np.fft.rfft(indata[:, 0], n=fftsize))
                 magnitude *= gain / fftsize
                 leftspectrum = []
-                for x in magnitude[low_bin:low_bin + COLUMNS]:
+                for x in magnitude[low_bin:low_bin + 60]:
                     leftspectrum.append(round(x * 100000))
                 #Правый канал
                 magnitude = np.abs(np.fft.rfft(indata[:, 1], n=fftsize))
                 magnitude *= gain / fftsize
                 rightspectrum = []
-                for x in magnitude[low_bin:low_bin + COLUMNS]:
+                for x in magnitude[low_bin:low_bin + 60]:
                     rightspectrum.append(round(x * 100000))
 
                 lock_spectrum.acquire()
@@ -358,7 +392,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         for i in range(0, 10):
             self.leds.append([0, 0, 0])
 
-        self.spectrum = [0] * COLUMNS
+        self.spectrum = [0] * 60
 
         self.maxvalue = 1
         self.lastMaxPeakTime = time.time()
@@ -391,10 +425,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
     def strob(self):
         buf = [0x00]
-
         for i in range(0, 30):
             buf.append(0xFF)
-
         try:
             self.out_report.set_raw_data(buf)
             self.out_report.send()
@@ -513,8 +545,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.spectrum.append(x)
         lock_spectrum.release()
 
-        if len(self.spectrum) != COLUMNS:
-            self.spectrum = [0] * COLUMNS
+        if len(self.spectrum) != 60:
+            self.spectrum = [0] * 60
 
         self.update()
 
@@ -528,14 +560,14 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                 self.maxvalue = maxs
                 self.lastMaxPeakTime = time.time()
             gainCorrection = ((self.agBurstValue / 100) * 1000 + 1000) / self.maxvalue
-            for i in range(0, COLUMNS):
+            for i in range(0, 60):
                 self.spectrum[i] = self.spectrum[i] * gainCorrection
         #==========================
 
 
         #Логарифмический компрессор
         if self.butt["LogComp"][5]:
-            for i in range(0, COLUMNS):
+            for i in range(0, 60):
                 try:
                     self.spectrum[i] = ((self.agBurstValue / 100) * 1000 + 1000) * (1 / math.log10(1000 / 50)) * math.log10(self.spectrum[i] / 50)
                     if self.spectrum[i] < 0:
@@ -695,6 +727,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         ch[3] = max(self.spectrum[8:14])
         ch[4] = max(self.spectrum[14:30])
 
+        #Затухание светодиодов
         for i in range(0, 5):
             self.leds[i][RED] -= 50
             self.leds[i][GREEN] -= 50
@@ -924,7 +957,7 @@ def main():
     window = ColormusicApp()
     window.show()
 
-    print(sd.query_devices())
+    print(str(sd.query_devices()).split('\n'))
 
     sound_thread = SoundThread()
     sound_thread.start()

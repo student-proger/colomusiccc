@@ -28,22 +28,22 @@ import pygame
 import pygame.midi
 from pygame.locals import *
 
-#Qt
+# Qt
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import QTableWidgetItem, QLabel, QTimeEdit, QInputDialog, QComboBox
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QPainter, QColor, QBrush, QFont
 from PyQt5.QtCore import Qt, QRect
-#design
+# design
 import mainform
 
-#Индексы элементов списка leds. Соответственно цветам светодиодов.
+# Индексы элементов списка leds. Соответственно цветам светодиодов.
 RED = 0
 GREEN = 1
 BLUE = 2
 
-#Цвета для вывода на Launchpad. Для мигающего необходимо прибавить LPC_FLASH к основному значению.
+# Цвета для вывода на Launchpad. Для мигающего необходимо прибавить LPC_FLASH к основному значению.
 LPC_OFF = 12
 LPC_RED = (0, 0x0D, 0x0E, 0x0F)
 LPC_GREEN = (0, 0x1C, 0x2C, 0x3C)
@@ -52,7 +52,7 @@ LPC_YELLOW = 0x3E
 LPC_FLASH = -4
 
 
-#Кнопки без фиксации
+# Кнопки без фиксации
 buttPress = {
     "agbvPlus": [150, 35, 20, 20, "+", False, None],
     "agbvMinus": [80, 35, 20, 20, "-", False, None]
@@ -73,7 +73,7 @@ leftLevel = 0
 rightLevel = 0
 
 
-#Класс для работы с MIDI устройством (Launchpad)
+# Класс для работы с MIDI устройством (Launchpad)
 class MidiDevice:
     def __init__(self):
         pygame.init()
@@ -90,7 +90,7 @@ class MidiDevice:
         self.midi_thread.join()
         pygame.midi.quit()
 
-    #Включение MIDI-устройства ввода
+    # Включение MIDI-устройства ввода
     # device_id - ID MIDI-устройства
     # callback(msg) - callback функция, вызываемая при получении данных от устройства
     def startInput(self, device_id = None, callback = None):
@@ -99,7 +99,7 @@ class MidiDevice:
 
 
     def startOutput(self, device_id = None):
-        """Включение MIDI-устройства вывода
+        """ Включение MIDI-устройства вывода
 
         :param device_id: ID MIDI-устройства
         """
@@ -112,17 +112,17 @@ class MidiDevice:
 
 
     def send(self, msg, key, velocity):
-        """Отправка данных на устройство"""
+        """ Отправка данных на устройство """
         self.devOut.write_short(msg, key, velocity)
 
 
     def resetLaunchpad(self):
-        """Сброс ланчпада"""
+        """ Сброс ланчпада """
         self.send(0xB0, 0, 0)
 
     
     def setLed(self, x, y, c = None):
-        """Включает выбранный светодиод.
+        """ Включает выбранный светодиод.
         Варианты вызова:
         setLed(x, y, color), где x,y - координаты кнопки по сетке
         setLed(n, color), где n - номер кнопки по-порядку
@@ -137,7 +137,7 @@ class MidiDevice:
 
 
     def setTopLed(self, n, color):
-        """Включение светодиода на ланчпаде в верхем ряду кнопок
+        """ Включение светодиода на ланчпаде в верхем ряду кнопок
 
         :param n: номер кнопки
         :param color: цвет
@@ -146,18 +146,18 @@ class MidiDevice:
 
 
     def doubleBufferEnable(self):
-        """Включение двойной буферизации"""
+        """ Включение двойной буферизации """
         self.send(0xB0, 0x00, 0x31)
         self.DoubleBufferActivePage = 0
 
 
     def doubleBufferDisable(self):
-        """Выключение двойной буферизации"""
+        """ Выключение двойной буферизации """
         self.send(0xB0, 0x00, 0x30)
 
 
     def swapBuffer(self):
-        """Обмен страниц буфера"""
+        """ Обмен страниц буфера """
         if self.DoubleBufferActivePage == 0:
             self.send(0xB0, 0x00, 0x34)
         else:
@@ -165,7 +165,7 @@ class MidiDevice:
 
 
     def flashEnable(self):
-        """Включение режима мигания"""
+        """ Включение режима мигания """
         self.send(0xB0, 0x00, 0x28)
 
 
@@ -177,12 +177,12 @@ class MidiDevice:
 
 
     def rapidLedUpdate(self, velocity1, velocity2):
-        """Быстрое обновление данных. В качестве параметров передаются сразу два цвета для двух кнопок"""
+        """ Быстрое обновление данных. В качестве параметров передаются сразу два цвета для двух кнопок"""
         self.send(0x92, velocity1, velocity2)
 
 
     def allLedsOn(self, brightness):
-        """Включение всех светодиодов.
+        """ Включение всех светодиодов.
 
         :param brightness: яркость (1-3)
         """
@@ -245,6 +245,7 @@ class MidiDevice:
             print ("%2i: interface :%s:, name :%s:, opened :%s:  %s" %
                    (i, interf, name, opened, in_out))
 
+    """ Поток работы с MIDI устройством """
     class MidiInputThread(Thread):
         def __init__(self, device_id, callback):
             Thread.__init__(self)
@@ -254,7 +255,7 @@ class MidiDevice:
         def run(self):
             print("Start MIDI thread")
             self.input_main(self.device_id, self.callback)
-            print("MIDI stop thread")
+            print("Stop MIDI thread")
 
         
 
@@ -297,7 +298,7 @@ class MidiDevice:
             devIn.close()
         
 
-"""Класс захвата аудиопотока. Выполняется в отдельном потоке.
+""" Класс захвата аудиопотока. Выполняется в отдельном потоке.
 Здесь же происходит быстрое преобразование Фурье.
 """
 class SoundThread(Thread):
@@ -305,6 +306,7 @@ class SoundThread(Thread):
         Thread.__init__(self)
     
     def run(self):
+        print("Start Sound capture thread")
         global gain
         try:
             samplerate = sd.query_devices(soundDevice, 'input')['default_samplerate']
@@ -313,7 +315,7 @@ class SoundThread(Thread):
             fftsize = math.ceil(samplerate / delta_f)
             low_bin = math.floor(low / delta_f)
 
-            #callback-функция, которая вызывается при получении звукового сэмпла
+            # callback-функция, которая вызывается при получении звукового сэмпла
             def callback(indata, frames, time, status):
                 global spectrum
                 global leftLevel
@@ -323,14 +325,14 @@ class SoundThread(Thread):
                     text = '************************ ' + str(status) + ' ************************'
                     print(text)
                 
-                #Быстрые преобразования Фурье
-                #Левый канал
+                # Быстрые преобразования Фурье
+                # Левый канал
                 magnitude = np.abs(np.fft.rfft(indata[:, 0], n=fftsize))
                 magnitude *= gain / fftsize
                 leftspectrum = []
                 for x in magnitude[low_bin:low_bin + 60]:
                     leftspectrum.append(round(x * 100000))
-                #Правый канал
+                # Правый канал
                 magnitude = np.abs(np.fft.rfft(indata[:, 1], n=fftsize))
                 magnitude *= gain / fftsize
                 rightspectrum = []
@@ -345,7 +347,7 @@ class SoundThread(Thread):
                     spectrum.append(max(leftspectrum[i], rightspectrum[i]))
                 lock_spectrum.release()
 
-            #Захват звука с аудиоустройства
+            # Захват звука с аудиоустройства
             with sd.InputStream(device=soundDevice, channels=2, callback=callback,
                                 blocksize=int(samplerate * block_duration / 1000),
                                 samplerate=samplerate):
@@ -356,6 +358,7 @@ class SoundThread(Thread):
                         lock_stop_thread.release()
                         break
                     lock_stop_thread.release()
+            print("Stop Sound capture thread")
 
         except KeyboardInterrupt:
             print('Interrupted by user')
@@ -363,13 +366,13 @@ class SoundThread(Thread):
             print(type(e).__name__ + ': ' + str(e))
 
 
-#Класс главного окна приложения
+# Класс главного окна приложения
 class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)  # Это нужно для инициализации нашего дизайна
 
-        #Кнопки с фиксацией
+        # Кнопки с фиксацией
         #   X, Y, W, H, текст кнопки, состояние, callback
         self.butt = {
             "OnOff": [10, 10, 50, 20, "ON", False, None],
@@ -399,7 +402,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
         self.agBurstValue = 0
 
-        #Главный таймер
+        # Главный таймер
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.on_timer)
         self.timer.start(20)
@@ -458,7 +461,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         else:
             self.StroboTimer.stop()
 
-    #Отправка данных на USB HID устройство
+    # Отправка данных на USB HID устройство
     def writeHID(self):
         buf = [0x00]
 
@@ -472,7 +475,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         except AttributeError:
             return
 
-    """Открытие USB HID устройства для работы
+    """ Открытие USB HID устройства для работы
     vid - Vendor ID
     pid - Product ID
     """
@@ -486,7 +489,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             
             self.out_report = self.device.find_output_reports()[0]
 
-    #Закрытие USB HID устройства
+    # Закрытие USB HID устройства
     def closeHID(self):
         buf = [0x00] * 31
         try:
@@ -496,7 +499,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         except AttributeError:
             return
 
-    #Событие нажатия кнопки мыши
+    # Событие нажатия кнопки мыши
     def mousePressEvent(self, QMouseEvent):
         xx = QMouseEvent.x()
         yy = QMouseEvent.y()
@@ -524,7 +527,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                     if self.agBurstValue < 0:
                         self.agBurstValue = 0
 
-    #Событие отпускания кнопки мыши
+    # Событие отпускания кнопки мыши
     def mouseReleaseEvent(self, QMouseEvent):
         xx = QMouseEvent.x()
         yy = QMouseEvent.y()
@@ -532,7 +535,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             if buttPress[item][5]:
                 buttPress[item][5] = False
 
-    """Обработчик события главного таймера.
+    """ Обработчик события главного таймера.
     Таймер вызывается каждые 20 мс. Здесь происходит обработка данных спектра,
     выполнение алгоритма переключения светодиодов и отрисовка GUI.
     """
@@ -550,7 +553,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
         self.update()
 
-        #Auto gain
+        # Auto gain
         if self.butt["AutoGain"][5]:
             if time.time() - self.lastMaxPeakTime > 15:
                 self.maxvalue = 1
@@ -562,10 +565,10 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             gainCorrection = ((self.agBurstValue / 100) * 1000 + 1000) / self.maxvalue
             for i in range(0, 60):
                 self.spectrum[i] = self.spectrum[i] * gainCorrection
-        #==========================
+        # ==========================
 
 
-        #Логарифмический компрессор
+        # Логарифмический компрессор
         if self.butt["LogComp"][5]:
             for i in range(0, 60):
                 try:
@@ -574,7 +577,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                         self.spectrum[i] = 0
                 except ValueError:
                     self.spectrum[i] = 0
-        #==========================
+        # ==========================
 
         if self.Mode == 1:
             self.processMode1()
@@ -594,36 +597,36 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
      
         self.writeHID()
 
-    #Обработчик перерисовки формы
+    # Обработчик перерисовки формы
     def paintEvent(self, e):
         qp = QPainter()
         qp.begin(self)
         self.drawUI(qp)
         qp.end()
 
-    #Рисует пустой прямоугольник
+    # Рисует пустой прямоугольник
     def drawSimpleRect(self, qp, x1, y1, x2, y2):
         qp.drawLine(x1, y1, x2, y1)
         qp.drawLine(x2, y1, x2, y2)
         qp.drawLine(x2, y2, x1, y2)
         qp.drawLine(x1, y2, x1, y1)
 
-    #Рисуем GUI
+    # Рисуем GUI
     def drawUI(self, qp):
         activeColor = QColor(234, 237, 242)
         bgColor = QColor(39, 72, 135)
 
-        #Фон
+        # Фон
         qp.setPen(bgColor)
         qp.setBrush(bgColor)
         qp.drawRect(0, 0, 700, 500)
 
-        #Рамки
+        # Рамки
         qp.setPen(activeColor)
         self.drawSimpleRect(qp, 48, 60, 652, 164)
         self.drawSimpleRect(qp, 11, 60, 35, 164)
 
-        #Спектр сигнала
+        # Спектр сигнала
         qp.setPen(bgColor)
         if len(self.spectrum) != 0:
             maxv = 1000 #max(self.spectrum)
@@ -670,7 +673,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                     qp.setBrush(bgColor)
                 qp.drawRect(23, 62 + 10*(9 - y), 9, 9)
 
-        #Рисуем кнопки
+        # Рисуем кнопки
         for item in self.butt:
             x, y = self.butt[item][0], self.butt[item][1]
             w, h = self.butt[item][2], self.butt[item][3]
@@ -705,18 +708,18 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             qp.setFont(QFont('Arial', 10))
             qp.drawText(QRect(x, y, w, h), Qt.AlignCenter, buttPress[item][4])
 
-        #Текущее состояние светодиодов
+        # Текущее состояние светодиодов
         qp.setPen(activeColor)
         for i in range(0, 10):
             qp.setBrush(QColor(self.leds[i][RED], self.leds[i][GREEN], self.leds[i][BLUE]))
             qp.drawRect(30 + i * 22, 200, 20, 20)
 
-        #Надписи
+        # Надписи
         qp.setPen(activeColor)
         qp.setFont(QFont('Arial', 10))
         qp.drawText(QRect(100, 35, 50, 20), Qt.AlignCenter, str(self.agBurstValue) + "%")
 
-    #Обработка спектра для вывода на цветомузыку.
+    # Обработка спектра для вывода на цветомузыку.
     def processMode1(self):
         if len(self.spectrum) == 0:
             return
@@ -727,7 +730,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         ch[3] = max(self.spectrum[8:14])
         ch[4] = max(self.spectrum[14:30])
 
-        #Затухание светодиодов
+        # Затухание светодиодов
         for i in range(0, 5):
             self.leds[i][RED] -= 50
             self.leds[i][GREEN] -= 50
@@ -965,10 +968,11 @@ def main():
     
     app.exec_()  # и запускаем приложение
     
-    #Отправляем потокам сообщение о необходимости остановки
+    # Отправляем потокам сообщение о необходимости остановки
     lock_stop_thread.acquire()
     stop_thread = True
     lock_stop_thread.release()
+    # Ожидание завершения потока
     sound_thread.join()
     
     window.closeRes()

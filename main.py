@@ -107,13 +107,21 @@ class MidiDevice:
             port = pygame.midi.get_default_output_id()
         else:
             port = device_id
-        print ("using output_id :%s:" % port)
-        self.devOut = pygame.midi.Output(port, 0)
+
+        if port != -1:
+            print ("using output_id :%s:" % port)
+            try:
+                self.devOut = pygame.midi.Output(port, 0)
+            except:
+                self.devOut = None
+                print("")
+
 
 
     def send(self, msg, key, velocity):
         """ Отправка данных на устройство """
-        self.devOut.write_short(msg, key, velocity)
+        if self.devOut != None:
+            self.devOut.write_short(msg, key, velocity)
 
 
     def resetLaunchpad(self):
@@ -254,7 +262,8 @@ class MidiDevice:
 
         def run(self):
             print("Start MIDI thread")
-            self.input_main(self.device_id, self.callback)
+            if self.device_id != -1:
+                self.input_main(self.device_id, self.callback)
             print("Stop MIDI thread")
 
         
@@ -268,34 +277,35 @@ class MidiDevice:
             else:
                 input_id = device_id
 
-            print ("using input_id :%s:" % input_id)
-            devIn = pygame.midi.Input( input_id )
+            if input_id != -1:
+                print ("using input_id :%s:" % input_id)
+                devIn = pygame.midi.Input( input_id )
 
-            while True:
-                time.sleep(0.05)
-                events = event_get()
-                for e in events:
-                    if e.type in [pygame.midi.MIDIIN]:
-                        print (e)
+                while True:
+                    time.sleep(0.05)
+                    events = event_get()
+                    for e in events:
+                        if e.type in [pygame.midi.MIDIIN]:
+                            print (e)
 
-                if devIn.poll():
-                    midi_events = devIn.read(10)
-                    for item in midi_events:
-                        midi_msg = item[0]
-                        callback(midi_msg)
+                    if devIn.poll():
+                        midi_events = devIn.read(10)
+                        for item in midi_events:
+                            midi_msg = item[0]
+                            callback(midi_msg)
 
-                    # convert them into pygame events.
-                    #midi_evs = pygame.midi.midis2events(midi_events, devIn.device_id)
-                    #for m_e in midi_evs:
-                    #    event_post( m_e )
+                        # convert them into pygame events.
+                        #midi_evs = pygame.midi.midis2events(midi_events, devIn.device_id)
+                        #for m_e in midi_evs:
+                        #    event_post( m_e )
 
-                lock_stop_thread.acquire()
-                if stop_thread:
+                    lock_stop_thread.acquire()
+                    if stop_thread:
+                        lock_stop_thread.release()
+                        break
                     lock_stop_thread.release()
-                    break
-                lock_stop_thread.release()
 
-            devIn.close()
+                devIn.close()
         
 
 """ Класс захвата аудиопотока. Выполняется в отдельном потоке.

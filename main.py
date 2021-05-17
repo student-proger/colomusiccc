@@ -114,14 +114,15 @@ class MidiDevice:
                 self.devOut = pygame.midi.Output(port, 0)
             except:
                 self.devOut = None
-                print("")
 
 
 
     def send(self, msg, key, velocity):
         """ Отправка данных на устройство """
-        if self.devOut != None:
+        try:
             self.devOut.write_short(msg, key, velocity)
+        except AttributeError:
+            pass
 
 
     def resetLaunchpad(self):
@@ -306,6 +307,8 @@ class MidiDevice:
                     lock_stop_thread.release()
 
                 devIn.close()
+            else:
+                print("MIDI device not found.")
         
 
 """ Класс захвата аудиопотока. Выполняется в отдельном потоке.

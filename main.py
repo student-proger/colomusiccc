@@ -549,6 +549,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.out_report.send()
         except AttributeError:
             return
+        except:
+            return
 
     """ Открытие USB HID устройства для работы
     vid - Vendor ID

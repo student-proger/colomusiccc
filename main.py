@@ -1,5 +1,5 @@
 '''
-* Author:         Gladyshev Dmitriy (2020) 
+* Author:         Gladyshev Dmitriy (2021) 
 * 
 * Design Name:    ColormusicCC
 * Description:    Программа для управления цветомузыкой
@@ -13,10 +13,14 @@ TODO
 
 __version__ = "0.0.1a"
 
+DEV_IP = "127.0.0.1"
+DEV_PORT = 8888
+
 import os
 import sys
 import time
 import math
+import socket
 
 import numpy as np
 import sounddevice as sd
@@ -415,6 +419,10 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
         self.agBurstValue = 0
 
+        # Данные для 4-х канальной цветомузыки
+        # Red, yellow, green, blue
+        self.chanRYGB = [False, False, False, False]
+
         # Главный таймер
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.on_timer)
@@ -423,7 +431,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.openHID(vid = 0x1EAF, pid = 0x0028)
 
         self.midi = MidiDevice()
-        self.midi.startInput(callback = self.midicallback)
+        self.midi.startInput(callback = self.midiCallback)
         self.midi.startOutput(3)
 
         self.midi.resetLaunchpad()
@@ -436,7 +444,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.midi.resetLaunchpad()
         del self.midi
 
-    def midicallback(self, msg):
+    def midiCallback(self, msg):
         print(msg)
 
     def strob(self):
@@ -512,6 +520,19 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         except AttributeError:
             return
 
+    # Отправка данных на сетевое устройство
+    def sendUDP(self):
+        c = []
+        for item in self.chanRYGB:
+            if item == True:
+                c.append('1')
+            else:
+                c.append('0')
+        sc = "".join(c)
+        byte_message = bytes(sc, "utf-8")
+        opened_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        opened_socket.sendto(byte_message, (DEV_IP, DEV_PORT))
+
     # Событие нажатия кнопки мыши
     def mousePressEvent(self, QMouseEvent):
         xx = QMouseEvent.x()
@@ -585,6 +606,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         if self.butt["LogComp"][5]:
             for i in range(0, 60):
                 try:
+                    # Немного математической магии :)
                     self.spectrum[i] = ((self.agBurstValue / 100) * 1000 + 1000) * (1 / math.log10(1000 / 50)) * math.log10(self.spectrum[i] / 50)
                     if self.spectrum[i] < 0:
                         self.spectrum[i] = 0
@@ -592,6 +614,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                     self.spectrum[i] = 0
         # ==========================
 
+        # Обработка данных для 10 канальной RGB цветомузыки
         if self.Mode == 1:
             self.processMode1()
         elif self.Mode == 2:
@@ -607,8 +630,11 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         elif self.Mode == 7:
             self.processMode7()
 
+        # Обработка данных для 4 канальной RGBY цветомузыки
+        self.processRGBY()
      
         self.writeHID()
+        self.sendUDP()
 
     # Обработчик перерисовки формы
     def paintEvent(self, e):
@@ -727,12 +753,52 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             qp.setBrush(QColor(self.leds[i][RED], self.leds[i][GREEN], self.leds[i][BLUE]))
             qp.drawRect(30 + i * 22, 200, 20, 20)
 
+        # Текущее состояние светодиодов
+        qp.setPen(activeColor)
+        for i in range(0, 4):
+            if self.chanRYGB[i]:
+                if i == 0:
+                    qp.setBrush(QColor(255, 0, 0))
+                elif i == 1:
+                    qp.setBrush(QColor(255, 255, 0))
+                elif i == 2:
+                    qp.setBrush(QColor(0, 255, 0))
+                else:
+                    qp.setBrush(QColor(0, 0, 255))
+            else:
+                qp.setBrush(QColor(0, 0, 0))
+            qp.drawRect(30 + i * 22, 230, 20, 20)
+
         # Надписи
         qp.setPen(activeColor)
         qp.setFont(QFont('Arial', 10))
         qp.drawText(QRect(100, 35, 50, 20), Qt.AlignCenter, str(self.agBurstValue) + "%")
 
     # Обработка спектра для вывода на цветомузыку.
+    def processRGBY(self):
+        if len(self.spectrum) == 0:
+            return
+        ch = [0, 0, 0]
+        ch[0] = max(self.spectrum[0:2])
+        ch[1] = max(self.spectrum[2:4])
+        ch[2] = max(self.spectrum[4:8])
+        #ch[3] = max(self.spectrum[8:14])
+        #ch[4] = max(self.spectrum[14:30])
+
+        allOff = True
+        for i in range(0, 3):
+            if ch[i] > 800:
+                self.chanRYGB[i] = True
+                allOff = False
+            else:
+                self.chanRYGB[i] = False
+
+        if allOff:
+            self.chanRYGB[3] = True
+        else:
+            self.chanRYGB[3] = False
+
+
     def processMode1(self):
         if len(self.spectrum) == 0:
             return

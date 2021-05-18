@@ -19,11 +19,12 @@ DEV_PORT = 8888
 import os
 import sys
 import time
+import json
 import math
 import socket
 
 import numpy as np
-import sounddevice as sd
+import sounddevice as sounddev
 from pywinusb import hid
 
 from threading import Thread, Lock
@@ -34,13 +35,21 @@ from pygame.locals import *
 
 # Qt
 from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtWidgets import QTableWidgetItem, QLabel, QTimeEdit, QInputDialog, QComboBox
+from PyQt5.QtWidgets import QTableWidgetItem, QLabel, QInputDialog, QComboBox
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QPainter, QColor, QBrush, QFont
 from PyQt5.QtCore import Qt, QRect
 # design
 import mainform
+
+settings = {
+    "udp": {
+        "ip": "192.168.10.100",
+        "port": 8888
+    },
+    "mode": 1
+}
 
 # Индексы элементов списка leds. Соответственно цветам светодиодов.
 RED = 0
@@ -75,6 +84,51 @@ spectrum = []
 lock_spectrum = Lock()
 leftLevel = 0
 rightLevel = 0
+
+datapath = ""
+
+def messageBox(title, s):
+    """Отображение диалогового окна с сообщением
+
+    :param title: заголовок окна
+    :param s: сообщение
+    """
+    msg = QMessageBox()
+    msg.setIcon(QMessageBox.Information)
+    msg.setText(s)
+    msg.setWindowTitle(title)
+    msg.exec_()
+
+
+def saveSettings():
+    """Сохранение настроек в файл"""
+    logger("Сохранение настроек.")
+    try:
+        with open(datapath + 'settings.json', 'w') as f:
+            json.dump(settings, f)
+    except:
+        logger("ОШИБКА: Не удалось сохранить настройки.")
+        messageBox("Критическая ошибка", "Ошибка сохранения файла настроек. Возможно нет прав доступа на запись.")
+
+
+def loadSettings():
+    """Загрузка настроек из файла"""
+    global settings
+    try:
+        with open(datapath + 'settings.json') as f:
+            settings = json.load(f)
+    except FileNotFoundError:
+        pass
+    except:
+        messageBox("Критическая ошибка", "Ошибка чтения файла настроек. Возможно нет прав доступа на чтение.")
+
+
+def isWindows():
+    """Проверяет, под какой ОС запущено приложение. True, если Windows."""
+    if os.name == "nt":
+        return True
+    else:
+        return False
 
 
 # Класс для работы с MIDI устройством (Launchpad)
@@ -326,7 +380,7 @@ class SoundThread(Thread):
         print("Start Sound capture thread")
         global gain
         try:
-            samplerate = sd.query_devices(soundDevice, 'input')['default_samplerate']
+            samplerate = sounddev.query_devices(soundDevice, 'input')['default_samplerate']
 
             delta_f = (high - low) / (60 - 1)
             fftsize = math.ceil(samplerate / delta_f)
@@ -365,7 +419,7 @@ class SoundThread(Thread):
                 lock_spectrum.release()
 
             # Захват звука с аудиоустройства
-            with sd.InputStream(device=soundDevice, channels=2, callback=callback,
+            with sounddev.InputStream(device=soundDevice, channels=2, callback=callback,
                                 blocksize=int(samplerate * block_duration / 1000),
                                 samplerate=samplerate):
                 while True:
@@ -1034,12 +1088,18 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 def main():
     global stop_thread
     global midi
+    global datapath
+
+    if isWindows():
+        datapath = os.getenv('APPDATA') + "\\ColormusicCC\\"
+        if not os.path.exists(datapath):
+            os.mkdir(datapath)
 
     app = QtWidgets.QApplication(sys.argv)
     window = ColormusicApp()
     window.show()
 
-    print(str(sd.query_devices()).split('\n'))
+    print(str(sounddev.query_devices()).split('\n'))
 
     sound_thread = SoundThread()
     sound_thread.start()

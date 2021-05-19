@@ -809,7 +809,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             qp.setBrush(QColor(self.leds[i][RED], self.leds[i][GREEN], self.leds[i][BLUE]))
             qp.drawRect(30 + i * 22, 200, 20, 20)
 
-        # Текущее состояние светодиодов
+        # Текущее состояние светодиодов RGBY
         qp.setPen(activeColor)
         for i in range(0, 4):
             if self.chanRYGB[i]:
@@ -823,7 +823,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                     qp.setBrush(QColor(0, 0, 255))
             else:
                 qp.setBrush(QColor(0, 0, 0))
-            qp.drawRect(30 + i * 22, 230, 20, 20)
+            qp.drawRect(280 + i * 22, 200, 20, 20)
 
         # Надписи
         qp.setPen(activeColor)

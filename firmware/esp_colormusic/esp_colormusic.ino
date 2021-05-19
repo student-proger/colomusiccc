@@ -124,7 +124,7 @@ void loop()
     //Serial.println(packetBuffer);
   }
 
-  static unsigned long t = 0;
+  /*static unsigned long t = 0;
   if (millis() - t > 300)
   {
     for (int i = 0; i < 4; i++)
@@ -139,7 +139,7 @@ void loop()
       }
     }
     t = millis();
-  }
+  }*/
 
   //Защита от превышения тока
   if (state[0] && state[1] && state[2] && state[3])

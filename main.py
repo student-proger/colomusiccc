@@ -13,7 +13,7 @@ TODO
 
 __version__ = "0.0.1a"
 
-DEV_IP = "127.0.0.1"
+DEV_IP = "192.168.10.100"
 DEV_PORT = 8888
 
 import os
@@ -575,6 +575,9 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.device.close()
         except AttributeError:
             return
+        except:
+            pass
+
 
     # Отправка данных на сетевое устройство
     def sendUDP(self):
@@ -588,6 +591,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         byte_message = bytes(sc, "utf-8")
         opened_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         opened_socket.sendto(byte_message, (DEV_IP, DEV_PORT))
+
 
     # Событие нажатия кнопки мыши
     def mousePressEvent(self, QMouseEvent):
@@ -617,6 +621,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                     if self.agBurstValue < 0:
                         self.agBurstValue = 0
 
+
     # Событие отпускания кнопки мыши
     def mouseReleaseEvent(self, QMouseEvent):
         xx = QMouseEvent.x()
@@ -624,6 +629,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         for item in buttPress:
             if buttPress[item][5]:
                 buttPress[item][5] = False
+
 
     """ Обработчик события главного таймера.
     Таймер вызывается каждые 20 мс. Здесь происходит обработка данных спектра,
@@ -645,16 +651,20 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
         # Auto gain
         if self.butt["AutoGain"][5]:
-            if time.time() - self.lastMaxPeakTime > 15:
-                self.maxvalue = 1
+            # Если максимальный уровень сигнала не превышает 20, то считаем, что тишина
+            if max(self.spectrum[0:30]) > 20:
+                if time.time() - self.lastMaxPeakTime > 15:
+                    self.maxvalue = 1
 
-            maxs = max(self.spectrum)
-            if maxs > self.maxvalue:
-                self.maxvalue = maxs
-                self.lastMaxPeakTime = time.time()
-            gainCorrection = ((self.agBurstValue / 100) * 1000 + 1000) / self.maxvalue
-            for i in range(0, 60):
-                self.spectrum[i] = self.spectrum[i] * gainCorrection
+                maxs = max(self.spectrum)
+                if maxs > self.maxvalue:
+                    self.maxvalue = maxs
+                    self.lastMaxPeakTime = time.time()
+                gainCorrection = ((self.agBurstValue / 100) * 1000 + 1000) / self.maxvalue
+                for i in range(0, 60):
+                    self.spectrum[i] = self.spectrum[i] * gainCorrection
+            else:
+                self.maxvalue = 1
         # ==========================
 
 
@@ -692,6 +702,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.writeHID()
         self.sendUDP()
 
+
     # Обработчик перерисовки формы
     def paintEvent(self, e):
         qp = QPainter()
@@ -699,12 +710,14 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.drawUI(qp)
         qp.end()
 
+
     # Рисует пустой прямоугольник
     def drawSimpleRect(self, qp, x1, y1, x2, y2):
         qp.drawLine(x1, y1, x2, y1)
         qp.drawLine(x2, y1, x2, y2)
         qp.drawLine(x2, y2, x1, y2)
         qp.drawLine(x1, y2, x1, y1)
+
 
     # Рисуем GUI
     def drawUI(self, qp):
@@ -830,6 +843,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         qp.setFont(QFont('Arial', 10))
         qp.drawText(QRect(100, 35, 50, 20), Qt.AlignCenter, str(self.agBurstValue) + "%")
 
+
     # Обработка спектра для вывода на цветомузыку.
     def processRGBY(self):
         if len(self.spectrum) == 0:
@@ -926,6 +940,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.leds[8][BLUE] = 255
             self.leds[9][BLUE] = 255
 
+
     def processMode3(self):
         if len(self.spectrum) == 0:
             return
@@ -961,6 +976,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.leds[5][BLUE] = 255
             self.leds[7][BLUE] = 255
 
+
     def processMode4(self):
         if len(self.spectrum) == 0:
             return
@@ -989,6 +1005,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         if ch[2] > 750:
             for i in range(0, 10):
                 self.leds[i][BLUE] = 255
+
 
     def processMode5(self):
         if len(self.spectrum) == 0:
@@ -1026,6 +1043,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.leds[9 - i][GREEN] = self.leds[i][GREEN]
             self.leds[9 - i][BLUE] = self.leds[i][BLUE]
 
+
     def processMode6(self):
         if len(self.spectrum) == 0:
             return
@@ -1055,6 +1073,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             #self.leds[9 - i][RED] = self.leds[i][RED]
             #self.leds[9 - i][GREEN] = self.leds[i][GREEN]
             #self.leds[9 - i][BLUE] = self.leds[i][BLUE]
+
 
     def processMode7(self):
         if len(self.spectrum) == 0:
@@ -1086,6 +1105,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.leds[7][BLUE] = ch[2]
         self.leds[8][BLUE] = ch[2]
         self.leds[9][BLUE] = ch[2]
+
 
 def main():
     global stop_thread

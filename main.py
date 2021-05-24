@@ -849,9 +849,13 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         if len(self.spectrum) == 0:
             return
         ch = [0, 0, 0]
-        ch[0] = max(self.spectrum[0:2])
-        ch[1] = max(self.spectrum[2:4])
-        ch[2] = max(self.spectrum[4:8])
+        ch[0] = max(self.spectrum[0:4])
+        ch[1] = max(self.spectrum[4:8])
+        ch[2] = max(self.spectrum[8:13])
+
+        #ch[0] = max(self.spectrum[0:2])
+        #ch[1] = max(self.spectrum[2:4])
+        #ch[2] = max(self.spectrum[4:8])
         #ch[3] = max(self.spectrum[8:14])
         #ch[4] = max(self.spectrum[14:30])
 

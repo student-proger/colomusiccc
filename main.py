@@ -483,6 +483,12 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         # Данные для 4-х канальной цветомузыки
         # Red, yellow, green, blue
         self.chanRYGB = [False, False, False, False]
+        # Таймеры выключения ламп RGBY (R,Y,G)
+        self.lamptimer = [QtCore.QTimer(), QtCore.QTimer(), QtCore.QTimer()]
+        self.lamptimer[0].timeout.connect(lambda: self.stoplamp(0))
+        self.lamptimer[1].timeout.connect(lambda: self.stoplamp(1))
+        self.lamptimer[2].timeout.connect(lambda: self.stoplamp(2))
+            
 
         # Главный таймер
         self.timer = QtCore.QTimer()
@@ -501,12 +507,20 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.midi.setLed(8, 1, LPC_RED[1])
         self.midi.setLed(8, 2, LPC_RED[1])
 
+
     def closeRes(self):
         self.midi.resetLaunchpad()
         del self.midi
 
+
     def midiCallback(self, msg):
         print(msg)
+
+
+    def stoplamp(self, index):
+        self.chanRYGB[index] = False
+        self.lamptimer[index].stop()
+
 
     def strob(self):
         buf = [0x00]
@@ -517,6 +531,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.out_report.send()
         except AttributeError:
             return
+
 
     def eventStrobButton(self, name, state):
         for i in range(1, 6):
@@ -543,6 +558,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         else:
             self.StroboTimer.stop()
 
+
     # Отправка данных на USB HID устройство
     def writeHID(self):
         buf = [0x00]
@@ -559,6 +575,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         except:
             return
 
+
     """ Открытие USB HID устройства для работы
     vid - Vendor ID
     pid - Product ID
@@ -572,6 +589,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.device.open()
             
             self.out_report = self.device.find_output_reports()[0]
+
 
     # Закрытие USB HID устройства
     def closeHID(self):
@@ -589,6 +607,12 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
     # Отправка данных на сетевое устройство
     def sendUDP(self):
         c = []
+        # Дежурный канал
+        if (self.chanRYGB[0] == False) and (self.chanRYGB[1] == False) and (self.chanRYGB[2] == False):
+            self.chanRYGB[3] = True
+        else:
+            self.chanRYGB[3] = False
+
         for item in self.chanRYGB:
             if item == True:
                 c.append('1')
@@ -866,18 +890,14 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         #ch[3] = max(self.spectrum[8:14])
         #ch[4] = max(self.spectrum[14:30])
 
-        allOff = True
+        # Если превышен порог, то выставляем флаг включения лампы и запускаем таймер, который её затем выключит
         for i in range(0, 3):
             if ch[i] > 800:
                 self.chanRYGB[i] = True
-                allOff = False
+                self.lamptimer[i].start(100)
             else:
-                self.chanRYGB[i] = False
-
-        if allOff:
-            self.chanRYGB[3] = True
-        else:
-            self.chanRYGB[3] = False
+                pass
+                #self.chanRYGB[i] = False
 
 
     def processMode1(self):

@@ -36,6 +36,9 @@ from pywinusb import hid
 
 from threading import Thread, Lock
 
+from os import environ
+environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
+
 import pygame
 import pygame.midi
 from pygame.locals import *

@@ -926,7 +926,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                 self.leds[i][RED] = 255
             elif ch[i] > 800:
                 self.leds[i][GREEN] = 255
-            elif ch[i] > 500:
+            elif ch[i] > 650:
                 self.leds[i][BLUE] = 255
 
         for i in range(0, 5):

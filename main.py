@@ -173,7 +173,7 @@ class MidiDevice:
             port = device_id
 
         if port != -1:
-            print ("using output_id :%s:" % port)
+            print("\nusing output_id :%s:" % port)
             try:
                 self.devOut = pygame.midi.Output(port, 0)
             except:
@@ -462,22 +462,31 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             "Strob5": [480, 10, 45, 45, "Strob", False, self.eventStrobButton]
         }
 
+        # Номер активного режима работы цветомузыки
         self.Mode = 1
+        # Номер активной страницы ланчпада
         self.LaunchPadPage = 1
+        # Активность стробоскопов
         self.StroboActive = False
         self.StroboTimer = QtCore.QTimer()
         self.StroboTimer.timeout.connect(self.strob)
 
+        # Список состояний светодиодов. 10 штук по три (RGB)
         self.leds = []
         for i in range(0, 10):
             self.leds.append([0, 0, 0])
 
+        # Список для хранения частотного спектра сигнала
         self.spectrum = [0] * 60
 
+        # Для автоматического уровня сигнала
         self.maxvalue = 1
         self.lastMaxPeakTime = time.time()
 
         self.agBurstValue = 0
+
+        # Чувствительность по каналам
+        self.sensitivityRYG = [1000, 1000, 1000]
 
         # Данные для 4-х канальной цветомузыки
         # Red, yellow, green, blue
@@ -487,7 +496,6 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.lamptimer[0].timeout.connect(lambda: self.stoplamp(0))
         self.lamptimer[1].timeout.connect(lambda: self.stoplamp(1))
         self.lamptimer[2].timeout.connect(lambda: self.stoplamp(2))
-            
 
         # Главный таймер
         self.timer = QtCore.QTimer()
@@ -506,6 +514,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.midi.setLed(8, 1, LPC_RED[1])
         self.midi.setLed(8, 2, LPC_RED[1])
 
+        
+
         self.sensR.valueChanged.connect(lambda: self.sensitivityChange(0))
         self.sensY.valueChanged.connect(lambda: self.sensitivityChange(1))
         self.sensG.valueChanged.connect(lambda: self.sensitivityChange(2))
@@ -519,7 +529,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         else:
             value = self.sensG.value()
         value = (100 - value) * 10
-        print(value, id)
+        self.sensitivityRYG[id] = value
 
 
     def closeRes(self):
@@ -906,7 +916,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
         # Если превышен порог, то выставляем флаг включения лампы и запускаем таймер, который её затем выключит
         for i in range(0, 3):
-            if ch[i] > 800:
+            if ch[i] > self.sensitivityRYG[i]:
                 self.chanRYGB[i] = True
                 self.lamptimer[i].start(100)
             else:

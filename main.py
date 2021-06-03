@@ -506,6 +506,21 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.midi.setLed(8, 1, LPC_RED[1])
         self.midi.setLed(8, 2, LPC_RED[1])
 
+        self.sensR.valueChanged.connect(lambda: self.sensitivityChange(0))
+        self.sensY.valueChanged.connect(lambda: self.sensitivityChange(1))
+        self.sensG.valueChanged.connect(lambda: self.sensitivityChange(2))
+
+
+    def sensitivityChange(self, id):
+        if id == 0:
+            value = self.sensR.value()
+        elif id == 1:
+            value = self.sensY.value()
+        else:
+            value = self.sensG.value()
+        value = (100 - value) * 10
+        print(value, id)
+
 
     def closeRes(self):
         self.midi.resetLaunchpad()

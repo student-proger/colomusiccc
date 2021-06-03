@@ -24,27 +24,34 @@
      </rect>
     </property>
    </widget>
-   <widget class="QDial" name="dial">
+   <widget class="QDial" name="sensR">
     <property name="geometry">
      <rect>
-      <x>570</x>
-      <y>260</y>
-      <width>81</width>
-      <height>91</height>
+      <x>40</x>
+      <y>280</y>
+      <width>71</width>
+      <height>81</height>
      </rect>
     </property>
    </widget>
-   <widget class="QSlider" name="horizontalSlider">
+   <widget class="QDial" name="sensY">
     <property name="geometry">
      <rect>
-      <x>70</x>
-      <y>300</y>
-      <width>160</width>
-      <height>22</height>
+      <x>110</x>
+      <y>280</y>
+      <width>71</width>
+      <height>81</height>
      </rect>
     </property>
-    <property name="orientation">
-     <enum>Qt::Horizontal</enum>
+   </widget>
+   <widget class="QDial" name="sensG">
+    <property name="geometry">
+     <rect>
+      <x>180</x>
+      <y>280</y>
+      <width>71</width>
+      <height>81</height>
+     </rect>
     </property>
    </widget>
   </widget>

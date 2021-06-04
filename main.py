@@ -54,7 +54,8 @@ settings = {
         "ip": "192.168.10.100",
         "port": 8888
     },
-    "mode": 1
+    "mode": 1,
+    "sensitivityRYG": [800, 800, 800]
 }
 
 # Индексы элементов списка leds. Соответственно цветам светодиодов.
@@ -91,6 +92,7 @@ lock_spectrum = Lock()
 leftLevel = 0
 rightLevel = 0
 
+# Путь к папке с настройками
 datapath = ""
 
 def messageBox(title, s):
@@ -108,12 +110,10 @@ def messageBox(title, s):
 
 def saveSettings():
     """Сохранение настроек в файл"""
-    logger("Сохранение настроек.")
     try:
         with open(datapath + 'settings.json', 'w') as f:
             json.dump(settings, f)
     except:
-        logger("ОШИБКА: Не удалось сохранить настройки.")
         messageBox("Критическая ошибка", "Ошибка сохранения файла настроек. Возможно нет прав доступа на запись.")
 
 
@@ -318,6 +318,7 @@ class MidiDevice:
             print ("%2i: interface :%s:, name :%s:, opened :%s:  %s" %
                    (i, interf, name, opened, in_out))
 
+
     """ Поток работы с MIDI устройством """
     class MidiInputThread(Thread):
         def __init__(self, device_id, callback):
@@ -325,12 +326,12 @@ class MidiDevice:
             self.device_id = device_id
             self.callback = callback
 
+
         def run(self):
             print("Start MIDI thread")
             if self.device_id != -1:
                 self.input_main(self.device_id, self.callback)
             print("Stop MIDI thread")
-
         
 
         def input_main(self, device_id = None, callback = None):
@@ -443,7 +444,7 @@ class SoundThread(Thread):
             print(type(e).__name__ + ': ' + str(e))
 
 
-# Класс главного окна приложения
+""" Класс главного окна приложения """
 class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
     def __init__(self):
         super().__init__()
@@ -485,8 +486,9 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
         self.agBurstValue = 0
 
-        # Чувствительность по каналам
-        self.sensitivityRYG = [1000, 1000, 1000]
+        self.sensR.valueChanged.connect(lambda: self.sensitivityChange(0))
+        self.sensY.valueChanged.connect(lambda: self.sensitivityChange(1))
+        self.sensG.valueChanged.connect(lambda: self.sensitivityChange(2))
 
         # Данные для 4-х канальной цветомузыки
         # Red, yellow, green, blue
@@ -514,14 +516,10 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.midi.setLed(8, 1, LPC_RED[1])
         self.midi.setLed(8, 2, LPC_RED[1])
 
-        
 
-        self.sensR.valueChanged.connect(lambda: self.sensitivityChange(0))
-        self.sensY.valueChanged.connect(lambda: self.sensitivityChange(1))
-        self.sensG.valueChanged.connect(lambda: self.sensitivityChange(2))
-
-
+    """ Event на изменение положения ручек регулировки чувствительности """
     def sensitivityChange(self, id):
+        global settings
         if id == 0:
             value = self.sensR.value()
         elif id == 1:
@@ -529,7 +527,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         else:
             value = self.sensG.value()
         value = (100 - value) * 10
-        self.sensitivityRYG[id] = value
+        settings["sensitivityRYG"][id] = value
 
 
     def closeRes(self):
@@ -583,7 +581,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.StroboTimer.stop()
 
 
-    # Отправка данных на USB HID устройство
+    """ Отправка данных на USB HID устройство """
     def writeHID(self):
         buf = [0x00]
 
@@ -916,7 +914,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
         # Если превышен порог, то выставляем флаг включения лампы и запускаем таймер, который её затем выключит
         for i in range(0, 3):
-            if ch[i] > self.sensitivityRYG[i]:
+            if ch[i] > settings["sensitivityRYG"][i]:
                 self.chanRYGB[i] = True
                 self.lamptimer[i].start(100)
             else:
@@ -1172,6 +1170,8 @@ def main():
         if not os.path.exists(datapath):
             os.mkdir(datapath)
 
+    loadSettings()
+
     app = QtWidgets.QApplication(sys.argv)
     window = ColormusicApp()
     window.show()
@@ -1192,9 +1192,9 @@ def main():
     sound_thread.join()
     
     window.closeRes()
-    
-
     window.closeHID()
+
+    saveSettings()
 
 if __name__ == '__main__':
     main()

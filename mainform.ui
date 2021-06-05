@@ -33,6 +33,9 @@
       <height>81</height>
      </rect>
     </property>
+    <property name="maximum">
+     <number>127</number>
+    </property>
    </widget>
    <widget class="QDial" name="sensY">
     <property name="geometry">
@@ -43,6 +46,9 @@
       <height>81</height>
      </rect>
     </property>
+    <property name="maximum">
+     <number>127</number>
+    </property>
    </widget>
    <widget class="QDial" name="sensG">
     <property name="geometry">
@@ -52,6 +58,9 @@
       <width>71</width>
       <height>81</height>
      </rect>
+    </property>
+    <property name="maximum">
+     <number>127</number>
     </property>
    </widget>
   </widget>

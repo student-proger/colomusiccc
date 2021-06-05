@@ -462,12 +462,14 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             "Strob5": [480, 10, 45, 45, "Strob", False, self.eventStrobButton]
         }
 
+        # Установка значений элементам управления из текущих настроек
         self.sensR.setValue(settings["sensitivityRYG"][0])
         self.sensY.setValue(settings["sensitivityRYG"][1])
         self.sensG.setValue(settings["sensitivityRYG"][2])
 
         # Номер активной страницы ланчпада
         self.LaunchPadPage = 1
+
         # Активность стробоскопов
         self.StroboActive = False
         self.StroboTimer = QtCore.QTimer()
@@ -484,7 +486,6 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         # Для автоматического уровня сигнала
         self.maxvalue = 1
         self.lastMaxPeakTime = time.time()
-
         self.agBurstValue = 0
 
         self.sensR.valueChanged.connect(lambda: self.sensitivityChange(0))
@@ -511,11 +512,11 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.midi.startInput(callback = self.midiCallback)
         self.midi.startOutput(3)
 
-        self.midi.resetLaunchpad()
-        self.midi.demo()
-        self.midi.setLed(8, 0, LPC_YELLOW)
-        self.midi.setLed(8, 1, LPC_RED[1])
-        self.midi.setLed(8, 2, LPC_RED[1])
+        #self.midi.resetLaunchpad()
+        #self.midi.demo()
+        #self.midi.setLed(8, 0, LPC_YELLOW)
+        #self.midi.setLed(8, 1, LPC_RED[1])
+        #self.midi.setLed(8, 2, LPC_RED[1])
 
 
     """ Event на изменение положения ручек регулировки чувствительности """
@@ -538,6 +539,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
     def midiCallback(self, msg):
         print(msg)
+        #self.midi.send(186, msg[1], 50) состояние кнопок
+        #self.midi.send(176, 2, 2) вид светодиодов
 
 
     def stoplamp(self, index):
@@ -918,7 +921,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
         # Если превышен порог, то выставляем флаг включения лампы и запускаем таймер, который её затем выключит
         for i in range(0, 3):
-            value = (100 - settings["sensitivityRYG"][i]) * 10
+            value = (128 - settings["sensitivityRYG"][i]) * 7.8125
             if ch[i] > value:
                 self.chanRYGB[i] = True
                 self.lamptimer[i].start(100)

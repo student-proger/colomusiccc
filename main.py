@@ -19,9 +19,6 @@ TODO
 
 __version__ = "0.0.1a"
 
-DEV_IP = "192.168.10.100"
-DEV_PORT = 8888
-
 import os
 import sys
 import time
@@ -51,11 +48,11 @@ import mainform
 
 settings = {
     "udp": {
-        "ip": "192.168.10.100",
-        "port": 8888
+        "ip": "192.168.10.100",         # IP адрес цветомузыки
+        "port": 8888                    # порт цветомузыки
     },
-    "mode": 1,
-    "sensitivityRYG": [800, 800, 800]
+    "mode": 1,                          # Активный режим работы
+    "sensitivityRYG": [800, 800, 800]   # чувствительность по каналам
 }
 
 # Индексы элементов списка leds. Соответственно цветам светодиодов.
@@ -96,10 +93,10 @@ rightLevel = 0
 datapath = ""
 
 def messageBox(title, s):
-    """Отображение диалогового окна с сообщением
+    """ Отображение диалогового окна с сообщением
 
-    :param title: заголовок окна
-    :param s: сообщение
+    title -- заголовок окна
+    s -- сообщение
     """
     msg = QMessageBox()
     msg.setIcon(QMessageBox.Information)
@@ -109,7 +106,7 @@ def messageBox(title, s):
 
 
 def saveSettings():
-    """Сохранение настроек в файл"""
+    """ Сохранение настроек в файл """
     try:
         with open(datapath + 'settings.json', 'w') as f:
             json.dump(settings, f)
@@ -118,7 +115,7 @@ def saveSettings():
 
 
 def loadSettings():
-    """Загрузка настроек из файла"""
+    """ Загрузка настроек из файла """
     global settings
     try:
         with open(datapath + 'settings.json') as f:
@@ -130,15 +127,18 @@ def loadSettings():
 
 
 def isWindows():
-    """Проверяет, под какой ОС запущено приложение. True, если Windows."""
+    """ Проверяет, под какой ОС запущено приложение. 
+
+    Возвращает True, если Windows.
+    """
     if os.name == "nt":
         return True
     else:
         return False
 
 
-# Класс для работы с MIDI устройством (Launchpad)
 class MidiDevice:
+    """ Класс для работы с MIDI устройствами """
     def __init__(self):
         pygame.init()
         pygame.fastevent.init()
@@ -153,11 +153,12 @@ class MidiDevice:
             pass
         self.midi_thread.join()
         pygame.midi.quit()
-
-    # Включение MIDI-устройства ввода
-    # device_id - ID MIDI-устройства
-    # callback(msg) - callback функция, вызываемая при получении данных от устройства
+    
     def startInput(self, device_id = None, callback = None):
+        """ Включение MIDI-устройства ввода
+
+        device_id -- ID MIDI-устройства
+        callback(msg) -- callback функция, вызываемая при получении данных от устройства """
         self.midi_thread = self.MidiInputThread(device_id, callback)
         self.midi_thread.start()
 
@@ -165,7 +166,7 @@ class MidiDevice:
     def startOutput(self, device_id = None):
         """ Включение MIDI-устройства вывода
 
-        :param device_id: ID MIDI-устройства
+        device_id -- ID MIDI-устройства
         """
         if device_id is None:
             port = pygame.midi.get_default_output_id()
@@ -179,8 +180,6 @@ class MidiDevice:
             except:
                 self.devOut = None
 
-
-
     def send(self, msg, key, velocity):
         """ Отправка данных на устройство """
         try:
@@ -188,11 +187,9 @@ class MidiDevice:
         except AttributeError:
             pass
 
-
     def resetLaunchpad(self):
         """ Сброс ланчпада """
         self.send(0xB0, 0, 0)
-
     
     def setLed(self, x, y, c = None):
         """ Включает выбранный светодиод.
@@ -207,7 +204,6 @@ class MidiDevice:
             n = 16 * y + x
             color = c
         self.send(0x90, n, color)
-
 
     def setTopLed(self, n, color):
         """ Включение светодиода на ланчпаде в верхем ряду кнопок
@@ -613,7 +609,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.out_report = self.device.find_output_reports()[0]
 
 
-    # Закрытие USB HID устройства
+    """ Закрытие USB HID устройства """
     def closeHID(self):
         buf = [0x00] * 31
         try:
@@ -626,7 +622,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             pass
 
 
-    # Отправка данных на сетевое устройство
+    """ Отправка данных на сетевое устройство """
     def sendUDP(self):
         c = []
         # Дежурный канал
@@ -641,12 +637,16 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             else:
                 c.append('0')
         sc = "".join(c)
+
+        dev_ip = settings["udp"]["ip"]
+        dev_port = settings["udp"]["port"]
+
         byte_message = bytes(sc, "utf-8")
         opened_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        opened_socket.sendto(byte_message, (DEV_IP, DEV_PORT))
+        opened_socket.sendto(byte_message, (dev_ip, dev_port))
 
 
-    # Событие нажатия кнопки мыши
+    """ Событие нажатия кнопки мыши """
     def mousePressEvent(self, QMouseEvent):
         xx = QMouseEvent.x()
         yy = QMouseEvent.y()
@@ -658,7 +658,6 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                 proc = self.butt[item][6]
                 if proc:
                     proc(item, self.butt[item][5])
-
 
         for item in buttPress:
             x, y = buttPress[item][0], buttPress[item][1]
@@ -675,7 +674,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                         self.agBurstValue = 0
 
 
-    # Событие отпускания кнопки мыши
+    """ Событие отпускания кнопки мыши """
     def mouseReleaseEvent(self, QMouseEvent):
         xx = QMouseEvent.x()
         yy = QMouseEvent.y()

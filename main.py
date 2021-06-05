@@ -37,9 +37,9 @@ import pygame.midi
 from pygame.locals import *
 
 # Qt
-from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtWidgets import QTableWidgetItem, QLabel, QInputDialog, QComboBox
-from PyQt5.QtWidgets import QMessageBox
+from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtWidgets import QTableWidgetItem, QLabel, QInputDialog, QComboBox, QSystemTrayIcon
+from PyQt5.QtWidgets import QMessageBox, QWidget, QMenu
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QPainter, QColor, QBrush, QFont
 from PyQt5.QtCore import Qt, QRect
@@ -438,6 +438,14 @@ class SoundThread(Thread):
             print('Interrupted by user')
         except Exception as e:
             print(type(e).__name__ + ': ' + str(e))
+
+
+class SystemTrayIcon(QSystemTrayIcon):
+    def __init__(self, icon, parent=None):
+        QSystemTrayIcon.__init__(self, icon, parent)
+        menu = QMenu(parent)
+        exitAction = menu.addAction("Exit")
+        self.setContextMenu(menu)
 
 
 """ Класс главного окна приложения """
@@ -1180,7 +1188,10 @@ def main():
     sound_thread = SoundThread()
     sound_thread.start()
 
-    
+    w = QWidget()
+    trayIcon = SystemTrayIcon(QtGui.QIcon("images\\tray.png"), w)
+    trayIcon.show()
+
     app.exec_()  # и запускаем приложение
     
     # Отправляем потокам сообщение о необходимости остановки

@@ -51,7 +51,10 @@ settings = {
         "port": 8888                    # порт цветомузыки
     },
     "mode": 1,                          # Активный режим работы
-    "sensitivityRYG": [100, 100, 100]   # чувствительность по каналам
+    "sensitivityRYG": [100, 100, 100],  # чувствительность по каналам
+    "midi": {
+        "dev_name": "X-TOUCH MINI"      # Название MIDI устройства
+    }
 }
 
 # Индексы элементов списка leds. Соответственно цветам светодиодов.
@@ -315,8 +318,29 @@ class MidiDevice:
             if output:
                 in_out = "(output)"
 
-            print ("%2i: interface :%s:, name :%s:, opened :%s:  %s" %
-                   (i, interf, name, opened, in_out))
+            print ("%2i: interface: %s, name: %s, opened: %s  %s" %
+                   (i, interf.decode('utf-8'), name.decode('utf-8'), opened, in_out))
+
+    def findDevice(self, devname):
+        """ Ищет MIDI устройство по его имени.
+
+        Возвращает кортеж из ID устройства ввода и ID устройства вывода.
+        None вместо значения, если устройство с требуемым именем не найдено.
+        """
+        id_in = None
+        id_out = None
+
+        for i in range( pygame.midi.get_count() ):
+            r = pygame.midi.get_device_info(i)
+            (interf, name, input, output, opened) = r
+
+            if name.decode('utf-8') == devname:
+                if input:
+                    id_in = i
+                if output:
+                    id_out = i
+
+        return (id_in, id_out)
 
 
     class MidiInputThread(Thread):
@@ -517,8 +541,9 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.openHID(vid = 0x1EAF, pid = 0x0028)
 
         self.midi = MidiDevice()
-        self.midi.startInput(callback = self.midiCallback)
-        self.midi.startOutput(3)
+        midi_id = self.midi.findDevice(settings["midi"]["dev_name"])
+        self.midi.startInput(device_id = midi_id[0], callback = self.midiCallback)
+        self.midi.startOutput(midi_id[1])
 
         #self.midi.resetLaunchpad()
         #self.midi.demo()
@@ -1203,7 +1228,7 @@ def main():
     window = ColormusicApp()
     window.show()
 
-    print(str(sounddev.query_devices()).split('\n'))
+    #print(str(sounddev.query_devices()).split('\n'))
 
     sound_thread = SoundThread()
     sound_thread.start()

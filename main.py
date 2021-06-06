@@ -51,7 +51,7 @@ settings = {
         "port": 8888                    # порт цветомузыки
     },
     "mode": 1,                          # Активный режим работы
-    "sensitivityRYG": [800, 800, 800]   # чувствительность по каналам
+    "sensitivityRYG": [100, 100, 100]   # чувствительность по каналам
 }
 
 # Индексы элементов списка leds. Соответственно цветам светодиодов.
@@ -67,6 +67,10 @@ LPC_ORANGE = (0, 0x1D, 0x2E, 0x3F)
 LPC_YELLOW = 0x3E
 LPC_FLASH = -4
 
+MIDI_CC = 176
+MIDI_PROGRAM = 192
+MIDI_LED_BUTTON = 154
+MIDI_KNOB = 186
 
 # Кнопки без фиксации
 buttPress = {
@@ -146,6 +150,10 @@ class MidiDevice:
         self.__print_device_info()
 
     def __del__(self):
+        """ Деструктор класса MidiDevice.
+
+        Закрываем ресурсы и ждём завершения дочерних потоков.
+        """
         try:
             self.devOut.close()
         except AttributeError:
@@ -519,8 +527,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         #self.midi.setLed(8, 2, LPC_RED[1])
 
 
-    """ Event на изменение положения ручек регулировки чувствительности """
     def sensitivityChange(self, id):
+        """ Event на изменение положения ручек регулировки чувствительности """
         global settings
         if id == 0:
             value = self.sensR.value()
@@ -533,22 +541,31 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
 
     def closeRes(self):
+        """ Закрытие всех ресурсов, которые были выделены во время работы.
+
+        Эту функцию надо вызывать в конце работы приложения, перед уничтожением формы.
+        """
         self.midi.resetLaunchpad()
         del self.midi
 
 
     def midiCallback(self, msg):
+        """ callback функция, которая вызывается при получении сообщения от MIDI устройства.
+
+        msg -- MIDI сообщение. """
         print(msg)
-        #self.midi.send(186, msg[1], 50) состояние кнопок
+        #self.midi.send(186, msg[1], 50) состояние ручек
         #self.midi.send(176, 2, 2) вид светодиодов
 
 
     def stoplamp(self, index):
+        """ Выключение лампы с индексом index """
         self.chanRYGB[index] = False
         self.lamptimer[index].stop()
 
 
     def strob(self):
+        """ Генерация строба на цветомузыке """
         buf = [0x00]
         for i in range(0, 30):
             buf.append(0xFF)
@@ -560,6 +577,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
 
     def eventStrobButton(self, name, state):
+        """ Событие нажатия на кнопку стробоскопа """
         for i in range(1, 6):
             s = "Strob" + str(i)
             self.butt[s][5] = False
@@ -585,8 +603,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.StroboTimer.stop()
 
 
-    """ Отправка данных на USB HID устройство """
     def writeHID(self):
+        """ Отправка данных на USB HID устройство """
         buf = [0x00]
 
         for item in self.leds:
@@ -602,11 +620,12 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             return
 
 
-    """ Открытие USB HID устройства для работы
-    vid - Vendor ID
-    pid - Product ID
-    """
     def openHID(self, vid, pid):
+        """ Открытие USB HID устройства для работы.
+
+        vid -- Vendor ID
+        pid -- Product ID
+        """
         filter = hid.HidDeviceFilter(vendor_id = vid, product_id = pid)
         devices = filter.get_devices()
         if devices:
@@ -617,8 +636,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.out_report = self.device.find_output_reports()[0]
 
 
-    """ Закрытие USB HID устройства """
     def closeHID(self):
+        """ Закрытие USB HID устройства """
         buf = [0x00] * 31
         try:
             self.out_report.set_raw_data(buf)
@@ -629,9 +648,9 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         except:
             pass
 
-
-    """ Отправка данных на сетевое устройство """
+    
     def sendUDP(self):
+        """ Отправка данных на сетевое устройство """
         c = []
         # Дежурный канал
         if (self.chanRYGB[0] == False) and (self.chanRYGB[1] == False) and (self.chanRYGB[2] == False):
@@ -653,9 +672,9 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         opened_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         opened_socket.sendto(byte_message, (dev_ip, dev_port))
 
-
-    """ Событие нажатия кнопки мыши """
+    
     def mousePressEvent(self, QMouseEvent):
+        """ Событие нажатия кнопки мыши """
         xx = QMouseEvent.x()
         yy = QMouseEvent.y()
         for item in self.butt:
@@ -681,9 +700,9 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                     if self.agBurstValue < 0:
                         self.agBurstValue = 0
 
-
-    """ Событие отпускания кнопки мыши """
+    
     def mouseReleaseEvent(self, QMouseEvent):
+        """ Событие отпускания кнопки мыши """
         xx = QMouseEvent.x()
         yy = QMouseEvent.y()
         for item in buttPress:
@@ -691,11 +710,11 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                 buttPress[item][5] = False
 
 
-    """ Обработчик события главного таймера.
-    Таймер вызывается каждые 20 мс. Здесь происходит обработка данных спектра,
-    выполнение алгоритма переключения светодиодов и отрисовка GUI.
-    """
     def on_timer(self):
+        """ Обработчик события главного таймера.
+        Таймер вызывается каждые 20 мс. Здесь происходит обработка данных спектра,
+        выполнение алгоритма переключения светодиодов и отрисовка GUI.
+        """
         global spectrum
 
         lock_spectrum.acquire()
@@ -763,24 +782,24 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.sendUDP()
 
 
-    # Обработчик перерисовки формы
     def paintEvent(self, e):
+        """ Обработчик перерисовки формы """
         qp = QPainter()
         qp.begin(self)
         self.drawUI(qp)
         qp.end()
 
 
-    # Рисует пустой прямоугольник
     def drawSimpleRect(self, qp, x1, y1, x2, y2):
+        """ Рисует пустой прямоугольник """
         qp.drawLine(x1, y1, x2, y1)
         qp.drawLine(x2, y1, x2, y2)
         qp.drawLine(x2, y2, x1, y2)
         qp.drawLine(x1, y2, x1, y1)
 
 
-    # Рисуем GUI
     def drawUI(self, qp):
+        """ Рисуем GUI """
         activeColor = QColor(234, 237, 242)
         bgColor = QColor(39, 72, 135)
 
@@ -904,8 +923,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         qp.drawText(QRect(100, 35, 50, 20), Qt.AlignCenter, str(self.agBurstValue) + "%")
 
 
-    # Обработка спектра для вывода на цветомузыку.
     def processRGBY(self):
+        """ Обработка спектра для вывода на цветомузыку. """
         if len(self.spectrum) == 0:
             return
         ch = [0, 0, 0]

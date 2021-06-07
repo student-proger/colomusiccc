@@ -578,7 +578,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         """ callback функция, которая вызывается при получении сообщения от MIDI устройства.
 
         msg -- MIDI сообщение. """
-        print(msg)
+        print("MIDI: ", msg)
         #self.midi.send(186, msg[1], 50) состояние ручек
         #self.midi.send(176, 2, 2) вид светодиодов
 

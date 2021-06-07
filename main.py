@@ -545,6 +545,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.midi.startInput(device_id = midi_id[0], callback = self.midiCallback)
         self.midi.startOutput(midi_id[1])
 
+        self.setMidiState()
+
         #self.midi.resetLaunchpad()
         #self.midi.demo()
         #self.midi.setLed(8, 0, LPC_YELLOW)
@@ -574,12 +576,39 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         del self.midi
 
 
-    def midiCallback(self, msg):
+    def setMidiState(self):
+        """ Функция для установки начального состояния MIDI устройства """
+        if settings["midi"]["dev_name"] == "X-TOUCH MINI":
+            # Вид индикации энкодеров
+            self.midi.send(MIDI_CC, 1, 2)
+            self.midi.send(MIDI_CC, 2, 2)
+            self.midi.send(MIDI_CC, 3, 2)
+            # Текущие положения энкодеров
+            self.midi.send(186, 1, settings["sensitivityRYG"][0])
+            self.midi.send(186, 2, settings["sensitivityRYG"][1])
+            self.midi.send(186, 3, settings["sensitivityRYG"][2])
+
+
+    def midiCallback(self, message):
         """ callback функция, которая вызывается при получении сообщения от MIDI устройства.
 
-        msg -- MIDI сообщение. """
-        print("MIDI: ", msg)
-        #self.midi.send(186, msg[1], 50) состояние ручек
+        message -- MIDI сообщение. """
+        print("MIDI: ", message)
+
+        msg = message[0]
+        key = message[1]
+        velocity = message[2]
+        
+        if settings["midi"]["dev_name"] == "X-TOUCH MINI":
+            if msg == MIDI_KNOB: # Информация о вращении ручек энкодеров
+                if key == 1:
+                    self.sensR.setValue(velocity)
+                if key == 2:
+                    self.sensY.setValue(velocity)
+                if key == 3:
+                    self.sensG.setValue(velocity)
+
+        #self.midi.send(186, message[1], 50) состояние ручек
         #self.midi.send(176, 2, 2) вид светодиодов
 
 

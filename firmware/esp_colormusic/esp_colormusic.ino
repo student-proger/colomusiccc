@@ -27,10 +27,11 @@ char packetBuffer[UDP_TX_PACKET_MAX_SIZE + 1];
 WiFiUDP Udp;
 
 IPAddress local_IP(192, 168, 10, 100);
-// Set your Gateway IP address
 IPAddress gateway(192, 168, 10, 1);
-
 IPAddress subnet(255, 255, 255, 0);
+
+//Время последнего приёма пакета данных
+unsigned long lastRX = 0;
 
 void setup()
 {
@@ -94,17 +95,12 @@ void refresh()
 void loop()
 {
   int packetSize = Udp.parsePacket();
-  if (packetSize) {
-    /*Serial.printf("Received packet of size %d from %s:%d\n    (to %s:%d, free heap = %d B)\n",
-                  packetSize,
-                  Udp.remoteIP().toString().c_str(), Udp.remotePort(),
-                  Udp.destinationIP().toString().c_str(), Udp.localPort(),
-                  ESP.getFreeHeap());*/
-
-    // read the packet into packetBufffer
+  if (packetSize) 
+  {
     int n = Udp.read(packetBuffer, UDP_TX_PACKET_MAX_SIZE);
     if (n == 4)
     {
+      lastRX = millis();
       for (int i = 0; i < 4; i++)
       {
         if (packetBuffer[i] == '1')
@@ -116,39 +112,22 @@ void loop()
           state[i] = false;
         }
       }
-
-
     }
-    //packetBuffer[n] = 0;
-    //Serial.println("Contents:");
-    //Serial.println(packetBuffer);
   }
 
-  /*static unsigned long t = 0;
-  if (millis() - t > 300)
+  //Гасим лампы, если больше 5 секунд нет пакетов
+  if (millis() - lastRX > 5000)
   {
     for (int i = 0; i < 4; i++)
     {
-      if (random(2))
-      {
-        state[i] = true;
-      }
-      else
-      {
-        state[i] = false;
-      }
+      state[i] = false;
     }
-    t = millis();
-  }*/
+  }
 
   //Защита от превышения тока
   if (state[0] && state[1] && state[2] && state[3])
   {
     state[3] = false;
-  }
-  if ((!state[0]) && (!state[1]) && (!state[2]))
-  {
-    state[3] = true;
   }
 
   refresh();

@@ -14,14 +14,10 @@ TODO
 Разбить проект на модули
 Отключение ламп при выходе из программы
 Режим освещения
-Отключение ламп при таймауте получения данных
 
 """
 
 __version__ = "0.0.1a"
-
-DEV_IP = "192.168.10.100"
-DEV_PORT = 8888
 
 import os
 import sys
@@ -44,21 +40,24 @@ import pygame.midi
 from pygame.locals import *
 
 # Qt
-from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtWidgets import QTableWidgetItem, QLabel, QInputDialog, QComboBox
-from PyQt5.QtWidgets import QMessageBox
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtGui import QPainter, QColor, QBrush, QFont
+from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtWidgets import QTableWidgetItem, QLabel, QInputDialog, QComboBox, QSystemTrayIcon
+from PyQt5.QtWidgets import QMessageBox, QWidget, QMenu
+from PyQt5.QtGui import QPixmap, QPainter, QColor, QBrush, QFont
 from PyQt5.QtCore import Qt, QRect
 # design
 import mainform
 
 settings = {
     "udp": {
-        "ip": "192.168.10.100",
-        "port": 8888
+        "ip": "192.168.10.100",         # IP адрес цветомузыки
+        "port": 8888                    # порт цветомузыки
     },
-    "mode": 1
+    "mode": 1,                          # Активный режим работы
+    "sensitivityRYG": [100, 100, 100],  # чувствительность по каналам
+    "midi": {
+        "dev_name": "X-TOUCH MINI"      # Название MIDI устройства
+    }
 }
 
 # Индексы элементов списка leds. Соответственно цветам светодиодов.
@@ -74,6 +73,10 @@ LPC_ORANGE = (0, 0x1D, 0x2E, 0x3F)
 LPC_YELLOW = 0x3E
 LPC_FLASH = -4
 
+MIDI_CC = 176
+MIDI_PROGRAM = 192
+MIDI_LED_BUTTON = 154
+MIDI_KNOB = 186
 
 # Кнопки без фиксации
 buttPress = {
@@ -95,13 +98,14 @@ lock_spectrum = Lock()
 leftLevel = 0
 rightLevel = 0
 
+# Путь к папке с настройками
 datapath = ""
 
 def messageBox(title, s):
-    """Отображение диалогового окна с сообщением
+    """ Отображение диалогового окна с сообщением
 
-    :param title: заголовок окна
-    :param s: сообщение
+    title -- заголовок окна
+    s -- сообщение
     """
     msg = QMessageBox()
     msg.setIcon(QMessageBox.Information)
@@ -111,18 +115,16 @@ def messageBox(title, s):
 
 
 def saveSettings():
-    """Сохранение настроек в файл"""
-    logger("Сохранение настроек.")
+    """ Сохранение настроек в файл """
     try:
         with open(datapath + 'settings.json', 'w') as f:
             json.dump(settings, f)
     except:
-        logger("ОШИБКА: Не удалось сохранить настройки.")
         messageBox("Критическая ошибка", "Ошибка сохранения файла настроек. Возможно нет прав доступа на запись.")
 
 
 def loadSettings():
-    """Загрузка настроек из файла"""
+    """ Загрузка настроек из файла """
     global settings
     try:
         with open(datapath + 'settings.json') as f:
@@ -134,15 +136,18 @@ def loadSettings():
 
 
 def isWindows():
-    """Проверяет, под какой ОС запущено приложение. True, если Windows."""
+    """ Проверяет, под какой ОС запущено приложение. 
+
+    Возвращает True, если Windows.
+    """
     if os.name == "nt":
         return True
     else:
         return False
 
 
-# Класс для работы с MIDI устройством (Launchpad)
 class MidiDevice:
+    """ Класс для работы с MIDI устройствами """
     def __init__(self):
         pygame.init()
         pygame.fastevent.init()
@@ -151,17 +156,22 @@ class MidiDevice:
         self.__print_device_info()
 
     def __del__(self):
+        """ Деструктор класса MidiDevice.
+
+        Закрываем ресурсы и ждём завершения дочерних потоков.
+        """
         try:
             self.devOut.close()
         except AttributeError:
             pass
         self.midi_thread.join()
         pygame.midi.quit()
-
-    # Включение MIDI-устройства ввода
-    # device_id - ID MIDI-устройства
-    # callback(msg) - callback функция, вызываемая при получении данных от устройства
+    
     def startInput(self, device_id = None, callback = None):
+        """ Включение MIDI-устройства ввода
+
+        device_id -- ID MIDI-устройства
+        callback(msg) -- callback функция, вызываемая при получении данных от устройства """
         self.midi_thread = self.MidiInputThread(device_id, callback)
         self.midi_thread.start()
 
@@ -169,7 +179,7 @@ class MidiDevice:
     def startOutput(self, device_id = None):
         """ Включение MIDI-устройства вывода
 
-        :param device_id: ID MIDI-устройства
+        device_id -- ID MIDI-устройства
         """
         if device_id is None:
             port = pygame.midi.get_default_output_id()
@@ -177,13 +187,11 @@ class MidiDevice:
             port = device_id
 
         if port != -1:
-            print ("using output_id :%s:" % port)
+            print("\nusing output_id :%s:" % port)
             try:
                 self.devOut = pygame.midi.Output(port, 0)
             except:
                 self.devOut = None
-
-
 
     def send(self, msg, key, velocity):
         """ Отправка данных на устройство """
@@ -192,14 +200,12 @@ class MidiDevice:
         except AttributeError:
             pass
 
-
     def resetLaunchpad(self):
-        """ Сброс ланчпада """
+        """ Launchpad: Сброс ланчпада """
         self.send(0xB0, 0, 0)
-
     
     def setLed(self, x, y, c = None):
-        """ Включает выбранный светодиод.
+        """ Launchpad: Включает выбранный светодиод.
         Варианты вызова:
         setLed(x, y, color), где x,y - координаты кнопки по сетке
         setLed(n, color), где n - номер кнопки по-порядку
@@ -212,9 +218,8 @@ class MidiDevice:
             color = c
         self.send(0x90, n, color)
 
-
     def setTopLed(self, n, color):
-        """ Включение светодиода на ланчпаде в верхем ряду кнопок
+        """ Launchpad: Включение светодиода на ланчпаде в верхем ряду кнопок
 
         :param n: номер кнопки
         :param color: цвет
@@ -223,51 +228,47 @@ class MidiDevice:
 
 
     def doubleBufferEnable(self):
-        """ Включение двойной буферизации """
+        """ Launchpad: Включение двойной буферизации """
         self.send(0xB0, 0x00, 0x31)
         self.DoubleBufferActivePage = 0
 
 
     def doubleBufferDisable(self):
-        """ Выключение двойной буферизации """
+        """ Launchpad: Выключение двойной буферизации """
         self.send(0xB0, 0x00, 0x30)
 
-
     def swapBuffer(self):
-        """ Обмен страниц буфера """
+        """ Launchpad: Обмен страниц буфера """
         if self.DoubleBufferActivePage == 0:
             self.send(0xB0, 0x00, 0x34)
         else:
             self.send(0xB0, 0x00, 0x31)
 
-
     def flashEnable(self):
-        """ Включение режима мигания """
+        """ Launchpad: Включение режима мигания """
         self.send(0xB0, 0x00, 0x28)
 
-
     def flashActive(self, enable):
+        """ Launchpad: активация мигания """
         if enable:
             self.send(0xB0, 0x00, 0x20)
         else:
             self.send(0xB0, 0x00, 0x21)
 
-
     def rapidLedUpdate(self, velocity1, velocity2):
-        """ Быстрое обновление данных. В качестве параметров передаются сразу два цвета для двух кнопок"""
+        """ Launchpad: Быстрое обновление данных. В качестве параметров передаются сразу два цвета для двух кнопок"""
         self.send(0x92, velocity1, velocity2)
 
-
     def allLedsOn(self, brightness):
-        """ Включение всех светодиодов.
+        """ Launchpad: Включение всех светодиодов.
 
         :param brightness: яркость (1-3)
         """
         if (brightness >= 1) and (brightness <= 3):
             self.send(0xB0, 0x00, 0x7C + brightness)
 
-
     def demo(self):
+        """ Launchpad: демка """
         for x in range(0, 4):
             for y in range(0, 4):
                 self.setLed(x, y, LPC_GREEN[3])
@@ -309,6 +310,7 @@ class MidiDevice:
                 self.setLed(x, y, LPC_OFF)
 
     def __print_device_info(self):
+        """ Вывод информации о подключенных MIDI устройствах """
         for i in range( pygame.midi.get_count() ):
             r = pygame.midi.get_device_info(i)
             (interf, name, input, output, opened) = r
@@ -319,11 +321,33 @@ class MidiDevice:
             if output:
                 in_out = "(output)"
 
-            print ("%2i: interface :%s:, name :%s:, opened :%s:  %s" %
-                   (i, interf, name, opened, in_out))
+            print ("%2i: interface: %s, name: %s, opened: %s  %s" %
+                   (i, interf.decode('utf-8'), name.decode('utf-8'), opened, in_out))
 
-    """ Поток работы с MIDI устройством """
+    def findDevice(self, devname):
+        """ Ищет MIDI устройство по его имени.
+
+        Возвращает кортеж из ID устройства ввода и ID устройства вывода.
+        None вместо значения, если устройство с требуемым именем не найдено.
+        """
+        id_in = None
+        id_out = None
+
+        for i in range( pygame.midi.get_count() ):
+            r = pygame.midi.get_device_info(i)
+            (interf, name, input, output, opened) = r
+
+            if name.decode('utf-8') == devname:
+                if input:
+                    id_in = i
+                if output:
+                    id_out = i
+
+        return (id_in, id_out)
+
+
     class MidiInputThread(Thread):
+        """ Поток работы с MIDI устройством """
         def __init__(self, device_id, callback):
             Thread.__init__(self)
             self.device_id = device_id
@@ -334,9 +358,7 @@ class MidiDevice:
             if self.device_id != -1:
                 self.input_main(self.device_id, self.callback)
             print("Stop MIDI thread")
-
         
-
         def input_main(self, device_id = None, callback = None):
             event_get = pygame.fastevent.get
             event_post = pygame.fastevent.post
@@ -379,10 +401,10 @@ class MidiDevice:
                 print("MIDI device not found.")
         
 
-""" Класс захвата аудиопотока. Выполняется в отдельном потоке.
-Здесь же происходит быстрое преобразование Фурье.
-"""
 class SoundThread(Thread):
+    """ Класс захвата аудиопотока. Выполняется в отдельном потоке.
+    Здесь же происходит быстрое преобразование Фурье.
+    """
     def __init__(self):
         Thread.__init__(self)
     
@@ -447,8 +469,17 @@ class SoundThread(Thread):
             print(type(e).__name__ + ': ' + str(e))
 
 
-# Класс главного окна приложения
+class SystemTrayIcon(QSystemTrayIcon):
+    """ Класс значка в системном трее """
+    def __init__(self, icon, parent=None):
+        QSystemTrayIcon.__init__(self, icon, parent)
+        menu = QMenu(parent)
+        exitAction = menu.addAction("Exit")
+        self.setContextMenu(menu)
+
+
 class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
+    """ Класс главного окна приложения """
     def __init__(self):
         super().__init__()
         self.setupUi(self)  # Это нужно для инициализации нашего дизайна
@@ -466,22 +497,35 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             "Strob5": [480, 10, 45, 45, "Strob", False, self.eventStrobButton]
         }
 
-        self.Mode = 1
+        # Установка значений элементам управления из текущих настроек
+        self.sensR.setValue(settings["sensitivityRYG"][0])
+        self.sensY.setValue(settings["sensitivityRYG"][1])
+        self.sensG.setValue(settings["sensitivityRYG"][2])
+
+        # Номер активной страницы ланчпада
         self.LaunchPadPage = 1
+
+        # Активность стробоскопов
         self.StroboActive = False
         self.StroboTimer = QtCore.QTimer()
         self.StroboTimer.timeout.connect(self.strob)
 
+        # Список состояний светодиодов. 10 штук по три (RGB)
         self.leds = []
         for i in range(0, 10):
             self.leds.append([0, 0, 0])
 
+        # Список для хранения частотного спектра сигнала
         self.spectrum = [0] * 60
 
+        # Для автоматического уровня сигнала
         self.maxvalue = 1
         self.lastMaxPeakTime = time.time()
-
         self.agBurstValue = 0
+
+        self.sensR.valueChanged.connect(lambda: self.sensitivityChange(0))
+        self.sensY.valueChanged.connect(lambda: self.sensitivityChange(1))
+        self.sensG.valueChanged.connect(lambda: self.sensitivityChange(2))
 
         # Данные для 4-х канальной цветомузыки
         # Red, yellow, green, blue
@@ -491,7 +535,6 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.lamptimer[0].timeout.connect(lambda: self.stoplamp(0))
         self.lamptimer[1].timeout.connect(lambda: self.stoplamp(1))
         self.lamptimer[2].timeout.connect(lambda: self.stoplamp(2))
-            
 
         # Главный таймер
         self.timer = QtCore.QTimer()
@@ -501,31 +544,85 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.openHID(vid = 0x1EAF, pid = 0x0028)
 
         self.midi = MidiDevice()
-        self.midi.startInput(callback = self.midiCallback)
-        self.midi.startOutput(3)
+        midi_id = self.midi.findDevice(settings["midi"]["dev_name"])
+        self.midi.startInput(device_id = midi_id[0], callback = self.midiCallback)
+        self.midi.startOutput(midi_id[1])
 
-        self.midi.resetLaunchpad()
-        self.midi.demo()
-        self.midi.setLed(8, 0, LPC_YELLOW)
-        self.midi.setLed(8, 1, LPC_RED[1])
-        self.midi.setLed(8, 2, LPC_RED[1])
+        self.setMidiState()
+
+        #self.midi.resetLaunchpad()
+        #self.midi.demo()
+        #self.midi.setLed(8, 0, LPC_YELLOW)
+        #self.midi.setLed(8, 1, LPC_RED[1])
+        #self.midi.setLed(8, 2, LPC_RED[1])
+
+
+    def sensitivityChange(self, id):
+        """ Event на изменение положения ручек регулировки чувствительности """
+        global settings
+        if id == 0:
+            value = self.sensR.value()
+        elif id == 1:
+            value = self.sensY.value()
+        else:
+            value = self.sensG.value()
+        # value = (100 - value) * 10
+        settings["sensitivityRYG"][id] = value
 
 
     def closeRes(self):
+        """ Закрытие всех ресурсов, которые были выделены во время работы.
+
+        Эту функцию надо вызывать в конце работы приложения, перед уничтожением формы.
+        """
         self.midi.resetLaunchpad()
         del self.midi
 
 
-    def midiCallback(self, msg):
-        print(msg)
+    def setMidiState(self):
+        """ Функция для установки начального состояния MIDI устройства """
+        if settings["midi"]["dev_name"] == "X-TOUCH MINI":
+            # Вид индикации энкодеров
+            self.midi.send(MIDI_CC, 1, 2)
+            self.midi.send(MIDI_CC, 2, 2)
+            self.midi.send(MIDI_CC, 3, 2)
+            # Текущие положения энкодеров
+            self.midi.send(186, 1, settings["sensitivityRYG"][0])
+            self.midi.send(186, 2, settings["sensitivityRYG"][1])
+            self.midi.send(186, 3, settings["sensitivityRYG"][2])
+
+
+    def midiCallback(self, message):
+        """ callback функция, которая вызывается при получении сообщения от MIDI устройства.
+
+        message -- MIDI сообщение. """
+        print("MIDI: ", message)
+
+        msg = message[0]
+        key = message[1]
+        velocity = message[2]
+        
+        if settings["midi"]["dev_name"] == "X-TOUCH MINI":
+            if msg == MIDI_KNOB: # Информация о вращении ручек энкодеров
+                if key == 1:
+                    self.sensR.setValue(velocity)
+                if key == 2:
+                    self.sensY.setValue(velocity)
+                if key == 3:
+                    self.sensG.setValue(velocity)
+
+        #self.midi.send(186, message[1], 50) состояние ручек
+        #self.midi.send(176, 2, 2) вид светодиодов
 
 
     def stoplamp(self, index):
+        """ Выключение лампы с индексом index """
         self.chanRYGB[index] = False
         self.lamptimer[index].stop()
 
 
     def strob(self):
+        """ Генерация строба на цветомузыке """
         buf = [0x00]
         for i in range(0, 30):
             buf.append(0xFF)
@@ -537,6 +634,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
 
     def eventStrobButton(self, name, state):
+        """ Событие нажатия на кнопку стробоскопа """
         for i in range(1, 6):
             s = "Strob" + str(i)
             self.butt[s][5] = False
@@ -562,8 +660,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.StroboTimer.stop()
 
 
-    # Отправка данных на USB HID устройство
     def writeHID(self):
+        """ Отправка данных на USB HID устройство """
         buf = [0x00]
 
         for item in self.leds:
@@ -579,11 +677,12 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             return
 
 
-    """ Открытие USB HID устройства для работы
-    vid - Vendor ID
-    pid - Product ID
-    """
     def openHID(self, vid, pid):
+        """ Открытие USB HID устройства для работы.
+
+        vid -- Vendor ID
+        pid -- Product ID
+        """
         filter = hid.HidDeviceFilter(vendor_id = vid, product_id = pid)
         devices = filter.get_devices()
         if devices:
@@ -594,8 +693,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             self.out_report = self.device.find_output_reports()[0]
 
 
-    # Закрытие USB HID устройства
     def closeHID(self):
+        """ Закрытие USB HID устройства """
         buf = [0x00] * 31
         try:
             self.out_report.set_raw_data(buf)
@@ -606,9 +705,9 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         except:
             pass
 
-
-    # Отправка данных на сетевое устройство
+    
     def sendUDP(self):
+        """ Отправка данных на сетевое устройство """
         c = []
         # Дежурный канал
         if (self.chanRYGB[0] == False) and (self.chanRYGB[1] == False) and (self.chanRYGB[2] == False):
@@ -622,13 +721,17 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
             else:
                 c.append('0')
         sc = "".join(c)
+
+        dev_ip = settings["udp"]["ip"]
+        dev_port = settings["udp"]["port"]
+
         byte_message = bytes(sc, "utf-8")
         opened_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        opened_socket.sendto(byte_message, (DEV_IP, DEV_PORT))
+        opened_socket.sendto(byte_message, (dev_ip, dev_port))
 
-
-    # Событие нажатия кнопки мыши
+    
     def mousePressEvent(self, QMouseEvent):
+        """ Событие нажатия кнопки мыши """
         xx = QMouseEvent.x()
         yy = QMouseEvent.y()
         for item in self.butt:
@@ -639,7 +742,6 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                 proc = self.butt[item][6]
                 if proc:
                     proc(item, self.butt[item][5])
-
 
         for item in buttPress:
             x, y = buttPress[item][0], buttPress[item][1]
@@ -655,9 +757,9 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                     if self.agBurstValue < 0:
                         self.agBurstValue = 0
 
-
-    # Событие отпускания кнопки мыши
+    
     def mouseReleaseEvent(self, QMouseEvent):
+        """ Событие отпускания кнопки мыши """
         xx = QMouseEvent.x()
         yy = QMouseEvent.y()
         for item in buttPress:
@@ -665,11 +767,11 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                 buttPress[item][5] = False
 
 
-    """ Обработчик события главного таймера.
-    Таймер вызывается каждые 20 мс. Здесь происходит обработка данных спектра,
-    выполнение алгоритма переключения светодиодов и отрисовка GUI.
-    """
     def on_timer(self):
+        """ Обработчик события главного таймера.
+        Таймер вызывается каждые 20 мс. Здесь происходит обработка данных спектра,
+        выполнение алгоритма переключения светодиодов и отрисовка GUI.
+        """
         global spectrum
 
         lock_spectrum.acquire()
@@ -715,19 +817,19 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         # ==========================
 
         # Обработка данных для 10 канальной RGB цветомузыки
-        if self.Mode == 1:
+        if settings["mode"] == 1:
             self.processMode1()
-        elif self.Mode == 2:
+        elif settings["mode"] == 2:
             self.processMode2()
-        elif self.Mode == 3:
+        elif settings["mode"] == 3:
             self.processMode3()
-        elif self.Mode == 4:
+        elif settings["mode"] == 4:
             self.processMode4()
-        elif self.Mode == 5:
+        elif settings["mode"] == 5:
             self.processMode5()
-        elif self.Mode == 6:
+        elif settings["mode"] == 6:
             self.processMode6()
-        elif self.Mode == 7:
+        elif settings["mode"] == 7:
             self.processMode7()
 
         # Обработка данных для 4 канальной RGBY цветомузыки
@@ -737,24 +839,24 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.sendUDP()
 
 
-    # Обработчик перерисовки формы
     def paintEvent(self, e):
+        """ Обработчик перерисовки формы """
         qp = QPainter()
         qp.begin(self)
         self.drawUI(qp)
         qp.end()
 
 
-    # Рисует пустой прямоугольник
     def drawSimpleRect(self, qp, x1, y1, x2, y2):
+        """ Рисует пустой прямоугольник """
         qp.drawLine(x1, y1, x2, y1)
         qp.drawLine(x2, y1, x2, y2)
         qp.drawLine(x2, y2, x1, y2)
         qp.drawLine(x1, y2, x1, y1)
 
 
-    # Рисуем GUI
     def drawUI(self, qp):
+        """ Рисуем GUI """
         activeColor = QColor(234, 237, 242)
         bgColor = QColor(39, 72, 135)
 
@@ -876,10 +978,13 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         qp.setPen(activeColor)
         qp.setFont(QFont('Arial', 10))
         qp.drawText(QRect(100, 35, 50, 20), Qt.AlignCenter, str(self.agBurstValue) + "%")
+        qp.drawText(QRect(self.sensR.x(), self.sensR.y() - 10, self.sensR.width(), 10), Qt.AlignCenter, str(settings["sensitivityRYG"][0]))
+        qp.drawText(QRect(self.sensY.x(), self.sensY.y() - 10, self.sensY.width(), 10), Qt.AlignCenter, str(settings["sensitivityRYG"][1]))
+        qp.drawText(QRect(self.sensG.x(), self.sensG.y() - 10, self.sensG.width(), 10), Qt.AlignCenter, str(settings["sensitivityRYG"][2]))
 
 
-    # Обработка спектра для вывода на цветомузыку.
     def processRGBY(self):
+        """ Обработка спектра для вывода на цветомузыку. """
         if len(self.spectrum) == 0:
             return
         ch = [0, 0, 0]
@@ -895,7 +1000,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
         # Если превышен порог, то выставляем флаг включения лампы и запускаем таймер, который её затем выключит
         for i in range(0, 3):
-            if ch[i] > 800:
+            value = (128 - settings["sensitivityRYG"][i]) * 7.8125
+            if ch[i] > value:
                 self.chanRYGB[i] = True
                 self.lamptimer[i].start(100)
             else:
@@ -930,7 +1036,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
                 self.leds[i][RED] = 255
             elif ch[i] > 800:
                 self.leds[i][GREEN] = 255
-            elif ch[i] > 500:
+            elif ch[i] > 650:
                 self.leds[i][BLUE] = 255
 
         for i in range(0, 5):
@@ -1151,16 +1257,21 @@ def main():
         if not os.path.exists(datapath):
             os.mkdir(datapath)
 
+    loadSettings()
+
     app = QtWidgets.QApplication(sys.argv)
     window = ColormusicApp()
     window.show()
 
-    print(str(sounddev.query_devices()).split('\n'))
+    #print(str(sounddev.query_devices()).split('\n'))
 
     sound_thread = SoundThread()
     sound_thread.start()
 
-    
+    w = QWidget()
+    trayIcon = SystemTrayIcon(QtGui.QIcon("images\\tray.png"), w)
+    trayIcon.show()
+
     app.exec_()  # и запускаем приложение
     
     # Отправляем потокам сообщение о необходимости остановки
@@ -1171,9 +1282,9 @@ def main():
     sound_thread.join()
     
     window.closeRes()
-    
-
     window.closeHID()
+
+    saveSettings()
 
 if __name__ == '__main__':
     main()

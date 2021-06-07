@@ -946,6 +946,9 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         qp.setPen(activeColor)
         qp.setFont(QFont('Arial', 10))
         qp.drawText(QRect(100, 35, 50, 20), Qt.AlignCenter, str(self.agBurstValue) + "%")
+        qp.drawText(QRect(self.sensR.x(), self.sensR.y() - 10, self.sensR.width(), 10), Qt.AlignCenter, str(settings["sensitivityRYG"][0]))
+        qp.drawText(QRect(self.sensY.x(), self.sensY.y() - 10, self.sensY.width(), 10), Qt.AlignCenter, str(settings["sensitivityRYG"][1]))
+        qp.drawText(QRect(self.sensG.x(), self.sensG.y() - 10, self.sensG.width(), 10), Qt.AlignCenter, str(settings["sensitivityRYG"][2]))
 
 
     def processRGBY(self):

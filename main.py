@@ -52,6 +52,8 @@ settings = {
     },
     "mode": 1,                          # Активный режим работы
     "sensitivityRYG": [100, 100, 100],  # чувствительность по каналам
+    "autogain": False,                  # Автоматическая регулировка уровня
+    "comp": False,                      # Логарифмический компрессор
     "midi": {
         "dev_name": "X-TOUCH MINI"      # Название MIDI устройства
     }
@@ -498,6 +500,8 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.sensR.setValue(settings["sensitivityRYG"][0])
         self.sensY.setValue(settings["sensitivityRYG"][1])
         self.sensG.setValue(settings["sensitivityRYG"][2])
+        self.butt["AutoGain"][5] = settings["autogain"]
+        self.butt["LogComp"][5] = settings["comp"]
 
         # Номер активной страницы ланчпада
         self.LaunchPadPage = 1
@@ -572,6 +576,9 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
 
         Эту функцию надо вызывать в конце работы приложения, перед уничтожением формы.
         """
+        settings["autogain"] = self.butt["AutoGain"][5]
+        settings["comp"] = self.butt["LogComp"][5]
+        
         self.midi.resetLaunchpad()
         del self.midi
 
@@ -1280,6 +1287,8 @@ def main():
     
     window.closeRes()
     window.closeHID()
+
+    del(window)
 
     saveSettings()
 

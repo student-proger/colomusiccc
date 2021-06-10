@@ -50,6 +50,7 @@ settings = {
         "ip": "192.168.10.100",         # IP адрес цветомузыки
         "port": 8888                    # порт цветомузыки
     },
+    "on": True,                         # Передача данных на цветомузыку активна
     "mode": 1,                          # Активный режим работы
     "sensitivityRYG": [100, 100, 100],  # чувствительность по каналам
     "autogain": False,                  # Автоматическая регулировка уровня
@@ -502,6 +503,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         self.sensG.setValue(settings["sensitivityRYG"][2])
         self.butt["AutoGain"][5] = settings["autogain"]
         self.butt["LogComp"][5] = settings["comp"]
+        self.butt["OnOff"][5] = settings["on"]
 
         # Номер активной страницы ланчпада
         self.LaunchPadPage = 1
@@ -578,6 +580,7 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         """
         settings["autogain"] = self.butt["AutoGain"][5]
         settings["comp"] = self.butt["LogComp"][5]
+        settings["on"] = self.butt["OnOff"][5]
         
         self.midi.resetLaunchpad()
         del self.midi
@@ -730,8 +733,11 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         dev_port = settings["udp"]["port"]
 
         byte_message = bytes(sc, "utf-8")
-        opened_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        opened_socket.sendto(byte_message, (dev_ip, dev_port))
+        try:
+            opened_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            opened_socket.sendto(byte_message, (dev_ip, dev_port))
+        except:
+            pass
 
     
     def mousePressEvent(self, QMouseEvent):
@@ -839,8 +845,9 @@ class ColormusicApp(QtWidgets.QMainWindow, mainform.Ui_MainWindow):
         # Обработка данных для 4 канальной RGBY цветомузыки
         self.processRGBY()
      
-        self.writeHID()
-        self.sendUDP()
+        if self.butt["OnOff"][5]:
+            self.writeHID()
+            self.sendUDP()
 
 
     def paintEvent(self, e):
@@ -1287,8 +1294,6 @@ def main():
     
     window.closeRes()
     window.closeHID()
-
-    del(window)
 
     saveSettings()
 

@@ -354,12 +354,17 @@ class MidiDevice:
             self.callback = callback
 
         def run(self):
+            """ Запуск потока """
             print("Start MIDI thread")
             if self.device_id != -1:
                 self.input_main(self.device_id, self.callback)
             print("Stop MIDI thread")
         
         def input_main(self, device_id = None, callback = None):
+            """ Функция выполняемая в потоке для обработки сообщений от midi устройств 
+            device_id -- ID MIDI устройства.
+            callback -- callback функция, которая ьудет вызываться при получении сообщений от устройства.
+            """
             event_get = pygame.fastevent.get
             event_post = pygame.fastevent.post
 
@@ -452,8 +457,8 @@ class SoundThread(Thread):
 
             # Захват звука с аудиоустройства
             with sounddev.InputStream(device=soundDevice, channels=2, callback=callback,
-                                blocksize=int(samplerate * block_duration / 1000),
-                                samplerate=samplerate):
+                                      blocksize=int(samplerate * block_duration / 1000),
+                                      samplerate=samplerate):
                 while True:
                     time.sleep(1)
                     lock_stop_thread.acquire()
